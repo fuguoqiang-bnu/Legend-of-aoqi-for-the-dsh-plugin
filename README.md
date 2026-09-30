@@ -95,7 +95,9 @@ dsh plugin add github:<你的用户名>/dsh-aoqi-pet
 dsh plugin add D:\Desktop\dsh-aoqi-pet
 ```
 
-插件声明了 `dsh.bundle.patch`，安装后会被当作 profile 的**组合包**默认启用；`cordis.patch.yml` 里开着 HMR 时会**热加载，不用重启 DSH**。
+插件声明了 `dsh.bundle.patch`，安装后会被当作 profile 的**组合包**默认启用；`cordis.patch.yml` 里开着 HMR 时，**宿主面**（`lib/index.js` 的事件接线、工具、路由）会热加载。
+但**客户端面**（`lib/client.js`，输入框旁边那只小宠物）是**启动时组装**的：安装完请**重启一次 DSH** 才会加载；
+之后刷新页面**不会**重读磁盘上的 bundle（宿主已把字节 snapshot 下来了）。详见 [docs/IN-APP-UI.md](docs/IN-APP-UI.md) 第 3–4 节。
 
 ### 方式 B：手动挂载（不想用包管理器时）
 
