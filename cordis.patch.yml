@@ -1,0 +1,20 @@
+# dsh-aoqi-pet 的 bundle 层（对应 package.json#dsh.bundle.patch）。
+#
+# 语义：文件内容是一个「行动词」数组；只有 insert: 才能新增插件行，
+# 直接写 - id: xxx 只会去覆盖/禁用已存在的行（写错会静默丢弃，所以这里必须用 insert）。
+# id 必须在整个 profile 的行栈里唯一，否则加载会以 duplicate loader entry id 失败。
+#
+# 安装方式见 README：
+#   1) 插件管理器 / dsh plugin add 安装本包（会读 dsh.bundle.patch 自动挂载）
+#   2) 手动把本插件目录放进 profile，再用同样内容的 insert 行挂载
+- insert:
+    # 宿主侧插件：状态机、通知、自动续写、宠物工具，以及桌宠进程的守护。
+    - id: aoqi-pet
+      name: dsh-aoqi-pet
+      # 所有可调项都在 lib/index.js 的 Config（schemastery）里声明，按需覆盖即可，例如：
+      # config:
+      #   petId: huo
+      #   companion:
+      #     scale: 1.2
+      #   autoContinue:
+      #     maxConsecutive: 5

@@ -1,0 +1,22 @@
+# 运行时产物
+__pycache__/
+*.py[cod]
+*.log
+
+# 依赖（本插件零依赖，正常不该出现）
+node_modules/
+pnpm-lock.yaml
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 素材流水线的中间产物
+tools/out/
+*.tmp
+
+# 抓取到的第三方图片不入库（版权原因），只保留来源记录
+assets/fetched/*
+!assets/fetched/SOURCES.md

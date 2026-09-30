@@ -1,0 +1,401 @@
+{
+  "generatedAt": "2026-09-30T11:18:03+08:00",
+  "source": {
+    "gif": "D:\\Desktop\\R.gif",
+    "png": "D:\\Desktop\\R.png"
+  },
+  "pets": [
+    {
+      "id": "jin",
+      "name": "诺亚",
+      "element": "金",
+      "color": "#f7c948",
+      "band": [
+        396,
+        460
+      ],
+      "portraitBand": [
+        229,
+        357
+      ],
+      "frames": 16,
+      "size": [
+        85,
+        160
+      ],
+      "states": [
+        "idle",
+        "working",
+        "done",
+        "error",
+        "waiting"
+      ],
+      "animation": {
+        "idle": {
+          "frames": 16,
+          "duration": 110,
+          "size": [
+            85,
+            160
+          ],
+          "bytes": 67509,
+          "colors": 96
+        },
+        "working": {
+          "frames": 16,
+          "duration": 70,
+          "size": [
+            91,
+            190
+          ],
+          "bytes": 68530,
+          "colors": 96
+        },
+        "done": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            89,
+            206
+          ],
+          "bytes": 69972,
+          "colors": 96
+        },
+        "error": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            96,
+            200
+          ],
+          "bytes": 71203,
+          "colors": 96
+        },
+        "waiting": {
+          "frames": 16,
+          "duration": 120,
+          "size": [
+            89,
+            200
+          ],
+          "bytes": 71554,
+          "colors": 96
+        }
+      }
+    },
+    {
+      "id": "mu",
+      "name": "阿瑞斯",
+      "element": "木",
+      "color": "#4ecb8b",
+      "band": [
+        253,
+        329
+      ],
+      "portraitBand": [
+        444,
+        579
+      ],
+      "frames": 16,
+      "size": [
+        108,
+        160
+      ],
+      "states": [
+        "idle",
+        "working",
+        "done",
+        "error",
+        "waiting"
+      ],
+      "animation": {
+        "idle": {
+          "frames": 16,
+          "duration": 110,
+          "size": [
+            108,
+            160
+          ],
+          "bytes": 79653,
+          "colors": 48
+        },
+        "working": {
+          "frames": 16,
+          "duration": 70,
+          "size": [
+            114,
+            190
+          ],
+          "bytes": 80944,
+          "colors": 48
+        },
+        "done": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            112,
+            207
+          ],
+          "bytes": 80167,
+          "colors": 40
+        },
+        "error": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            120,
+            200
+          ],
+          "bytes": 81574,
+          "colors": 40
+        },
+        "waiting": {
+          "frames": 16,
+          "duration": 120,
+          "size": [
+            112,
+            200
+          ],
+          "bytes": 81878,
+          "colors": 40
+        }
+      }
+    },
+    {
+      "id": "shui",
+      "name": "帝释天",
+      "element": "水",
+      "color": "#7fd4ff",
+      "band": [
+        15,
+        103
+      ],
+      "portraitBand": [
+        358,
+        443
+      ],
+      "frames": 16,
+      "size": [
+        129,
+        160
+      ],
+      "states": [
+        "idle",
+        "working",
+        "done",
+        "error",
+        "waiting"
+      ],
+      "animation": {
+        "idle": {
+          "frames": 16,
+          "duration": 110,
+          "size": [
+            129,
+            160
+          ],
+          "bytes": 77707,
+          "colors": 48
+        },
+        "working": {
+          "frames": 16,
+          "duration": 70,
+          "size": [
+            135,
+            191
+          ],
+          "bytes": 79016,
+          "colors": 48
+        },
+        "done": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            133,
+            209
+          ],
+          "bytes": 80497,
+          "colors": 48
+        },
+        "error": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            140,
+            200
+          ],
+          "bytes": 80395,
+          "colors": 32
+        },
+        "waiting": {
+          "frames": 16,
+          "duration": 120,
+          "size": [
+            133,
+            199
+          ],
+          "bytes": 80658,
+          "colors": 32
+        }
+      }
+    },
+    {
+      "id": "huo",
+      "name": "龙炎",
+      "element": "火",
+      "color": "#ff5f52",
+      "band": [
+        479,
+        567
+      ],
+      "portraitBand": [
+        112,
+        228
+      ],
+      "frames": 16,
+      "size": [
+        131,
+        160
+      ],
+      "states": [
+        "idle",
+        "working",
+        "done",
+        "error",
+        "waiting"
+      ],
+      "animation": {
+        "idle": {
+          "frames": 16,
+          "duration": 110,
+          "size": [
+            131,
+            160
+          ],
+          "bytes": 81554,
+          "colors": 40
+        },
+        "working": {
+          "frames": 16,
+          "duration": 70,
+          "size": [
+            137,
+            192
+          ],
+          "bytes": 77911,
+          "colors": 32
+        },
+        "done": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            135,
+            209
+          ],
+          "bytes": 79428,
+          "colors": 32
+        },
+        "error": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            141,
+            200
+          ],
+          "bytes": 80232,
+          "colors": 32
+        },
+        "waiting": {
+          "frames": 16,
+          "duration": 120,
+          "size": [
+            135,
+            202
+          ],
+          "bytes": 76291,
+          "colors": 24
+        }
+      }
+    },
+    {
+      "id": "an",
+      "name": "修尔",
+      "element": "暗",
+      "color": "#6c5ce7",
+      "band": [
+        135,
+        207
+      ],
+      "portraitBand": [
+        0,
+        111
+      ],
+      "frames": 16,
+      "size": [
+        96,
+        160
+      ],
+      "states": [
+        "idle",
+        "working",
+        "done",
+        "error",
+        "waiting"
+      ],
+      "animation": {
+        "idle": {
+          "frames": 16,
+          "duration": 110,
+          "size": [
+            96,
+            160
+          ],
+          "bytes": 75351,
+          "colors": 64
+        },
+        "working": {
+          "frames": 16,
+          "duration": 70,
+          "size": [
+            101,
+            190
+          ],
+          "bytes": 76636,
+          "colors": 64
+        },
+        "done": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            100,
+            205
+          ],
+          "bytes": 77081,
+          "colors": 64
+        },
+        "error": {
+          "frames": 16,
+          "duration": 90,
+          "size": [
+            107,
+            200
+          ],
+          "bytes": 78570,
+          "colors": 64
+        },
+        "waiting": {
+          "frames": 16,
+          "duration": 120,
+          "size": [
+            100,
+            201
+          ],
+          "bytes": 78646,
+          "colors": 64
+        }
+      }
+    }
+  ],
+  "animGeneratedAt": "2026-09-30T11:19:37+08:00",
+  "names": "页游官方名（见 docs/NAMES.md）"
+}

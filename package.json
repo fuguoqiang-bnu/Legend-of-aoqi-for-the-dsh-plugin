@@ -1,0 +1,66 @@
+{
+  "name": "dsh-aoqi-pet",
+  "version": "0.1.0",
+  "description": "百田《奥奇传说》传说五王（龙炎/诺亚/帝释天/修尔/阿瑞斯）主题的 DeepSeek Harness 桌宠插件：应用之外的置顶动画桌宠窗口、两套素材（官方高清立绘 / 原味逐帧）随时切、完成/出错通知，以及输出被 max-tokens 截断后的自动续写。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "companion",
+    "assets/pets",
+    "assets/theme",
+    "tools",
+    "test",
+    "docs",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "engines": {
+      "dsh": ">=0.1.0-0"
+    },
+    "catalog": {
+      "summary": "奥奇传说传说五王桌宠：跳出应用之外的置顶动画宠物窗（官方高清立绘与原味逐帧双素材可切）、完成/出错提醒，以及被截断输出的自动续写。",
+      "summaryEn": "Aoqi Legend desktop pet for DeepSeek Harness: an always-on-top animated companion window that lives outside the app, plus completion alerts and automatic continuation of max-tokens-truncated replies.",
+      "category": "utility",
+      "capabilities": [
+        "desktop-pet",
+        "notification",
+        "auto-continue",
+        "theme"
+      ]
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node test/smoke.mjs",
+    "test:switch": "python test/switch-guard.py",
+    "assets:slice": "python tools/slice_pets.py",
+    "assets:anim": "python tools/make_anim.py",
+    "assets:hires": "python tools/hires_build.py",
+    "assets:fetch": "python tools/fetch_assets.py"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop-pet",
+    "aoqi",
+    "aoqi-legend",
+    "100bt",
+    "auto-continue",
+    "tkinter"
+  ],
+  "license": "MIT"
+}

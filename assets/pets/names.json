@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-09-30T14:30:00+08:00",
+  "source": "《奥奇传说》页游官网 精灵大全 / 精灵图鉴（aoqi.100bt.com）",
+  "note": "只采信页游（aoqi.100bt.com）口径；手游（aqsy.100bt.com / /aoqi/m/）不在参考范围内。",
+  "twoLevels": {
+    "explain": "桌宠有同一批角色的两个形态，所以每只都记两级名字：桌宠帧（frames 素材）是【初始形态】，官方高清（hires 素材）是【传说王者】形态。",
+    "framesMaterial": "初始形态（图鉴图，与用户给的素材同设计；页游最高清透明图仅 104×102）",
+    "hiresMaterial": "传说王者（页游图鉴立绘 370×344 透明 PNG，降采样后使用）"
+  },
+  "fiveKings": {
+    "title": "传说五王",
+    "members": ["龙炎", "诺亚", "帝释天", "修尔", "阿瑞斯"],
+    "evidence": [
+      "带「传说五王合体」tag 的精灵全表仅 1 条：极 —— 官方成长故事原文『初心永在，传说五王灵魂融合……』",
+      "极的官方图鉴：http://aoqi.100bt.com/jingling/294876.html",
+      "名字含「传说王者·」的共 6 条：龙炎 / 诺亚 / 修尔 / 阿瑞斯 / 帝释天 ＋ 诺雅",
+      "诺雅是诺亚的妹妹（『小诺雅』条目标签原文即『诺亚的妹妹』），不属于五王",
+      "结论：传说五王 = 龙炎、诺亚、修尔、阿瑞斯、帝释天"
+    ]
+  },
+  "pets": {
+    "huo": {
+      "id": "huo",
+      "kindName": "龙炎",
+      "babyName": "小炎",
+      "element": "火",
+      "elementNote": "官方页表格无属性栏、卡面角标仅「战神/平衡」，按技能（炎灭火舞等）判为火系 — 存疑",
+      "legendTitle": "传说王者·龙炎",
+      "babyEntry": "http://aoqi.100bt.com/jingling/93497.html",
+      "babyImage": "http://resource.a0bi.com/aoqi/version3/resource/jingling/93496.png",
+      "legendEntry": "http://aoqi.100bt.com/jingling/294874.html",
+      "legendImage": "http://img4.a0bi.com/upload/articleResource/20190126/1548494939099.png",
+      "evolution": "官方原文：完成「小炎进化」活动获得龙炎",
+      "matchScore": 0.9262
+    },
+    "jin": {
+      "id": "jin",
+      "kindName": "诺亚",
+      "babyName": "小诺",
+      "element": "超能",
+      "elementNote": "官方卡面角标：超能 / 魔法",
+      "legendTitle": "传说王者·诺亚",
+      "babyEntry": "http://aoqi.100bt.com/jingling/54616.html",
+      "babyImage": "http://resource.a0bi.com/aoqi/version3/resource/jingling/57449.png",
+      "legendEntry": "http://aoqi.100bt.com/jingling/293589.html",
+      "legendImage": "http://img4.a0bi.com/upload/articleResource/20181119/1542622829659.png",
+      "evolution": "官方页标题：「小诺 诺亚 进化图鉴」",
+      "matchScore": 0.8613
+    },
+    "shui": {
+      "id": "shui",
+      "kindName": "帝释天",
+      "babyName": "小天",
+      "element": "光",
+      "elementNote": "官方卡面角标：光 / 射击",
+      "legendTitle": "传说王者·帝释天",
+      "babyEntry": "http://aoqi.100bt.com/jingling/76909.html",
+      "babyImage": "http://resource.a0bi.com/aoqi/version3/resource/jingling/76920.png",
+      "legendEntry": "http://aoqi.100bt.com/jingling/295815.html",
+      "legendImage": "http://img4.a0bi.com/upload/articleResource/20190318/1552911544803.png",
+      "evolution": "官方页标题：「小天 帝释天 进化图鉴」",
+      "matchScore": 0.9355
+    },
+    "an": {
+      "id": "an",
+      "kindName": "修尔",
+      "babyName": "阿修",
+      "element": "恶魔",
+      "elementNote": "官方卡面角标：恶魔 / 利爪；用户平时也直接叫它「阿修」",
+      "legendTitle": "传说王者·修尔",
+      "babyEntry": "http://aoqi.100bt.com/jingling/54619.html",
+      "babyImage": "http://resource.a0bi.com/aoqi/version3/resource/jingling/57451.png",
+      "legendEntry": "http://aoqi.100bt.com/jingling/291858.html",
+      "legendImage": "http://img4.a0bi.com/upload/articleResource/20180827/1535363199494.png",
+      "evolution": "官方页标题：「阿修 修尔 进化图鉴」",
+      "matchScore": 0.8106
+    },
+    "mu": {
+      "id": "mu",
+      "kindName": "阿瑞斯",
+      "babyName": "阿瑞",
+      "element": "草",
+      "elementNote": "官方卡面角标：草系 / 肉盾",
+      "legendTitle": "传说王者·阿瑞斯",
+      "babyEntry": "http://aoqi.100bt.com/jingling/93589.html",
+      "babyImage": "http://resource.a0bi.com/aoqi/version3/resource/jingling/93600.png",
+      "legendEntry": "http://aoqi.100bt.com/jingling/296843.html",
+      "legendImage": "http://img4.a0bi.com/upload/articleResource/20190603/1559552204681.png",
+      "evolution": "官方成长故事：「阿瑞王者进化……这就是生命王者」",
+      "matchScore": 0.8891
+    }
+  },
+  "aliases": {
+    "小炎": "huo", "龙炎": "huo",
+    "小诺": "jin", "诺亚": "jin",
+    "小天": "shui", "帝释天": "shui",
+    "阿修": "an", "修尔": "an",
+    "阿瑞": "mu", "阿瑞斯": "mu"
+  },
+  "notIncluded": {
+    "诺雅": "传说王者·诺雅，诺亚的妹妹，不属于传说五王，桌宠里没有她",
+    "极": "传说五王合体（灵魂融合）后的形态，不是五王之一"
+  }
+}

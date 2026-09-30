@@ -1,0 +1,37 @@
+MIT License
+
+Copyright (c) 2026 dsh-aoqi-pet contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+NOTE ON ART ASSETS / 美术资源说明
+
+The MIT license above covers the source code in this repository
+(lib/, companion/, tools/, test/).
+
+It does NOT cover the artwork under assets/ (sprite frames, GIFs, portraits,
+platform and background images). Those assets are fan-made derivations of
+characters from the game "奥奇传说" (Aola Legend, 百田信息科技 / Taomee-Baidu
+family of products). Their copyright belongs to the rights holder.
+
+The assets are included for personal, non-commercial, educational use with
+this plugin only. Do not redistribute them commercially. If you are the rights
+holder and want them removed, please open an issue.

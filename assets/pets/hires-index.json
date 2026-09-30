@@ -1,0 +1,62 @@
+{
+  "huo": {
+    "official": "传说王者·龙炎",
+    "element": "火",
+    "detail": "http://aoqi.100bt.com/jingling/294874.html",
+    "sourceImage": "http://img4.a0bi.com/upload/articleResource/20190126/1548494939099.png",
+    "sourceSize": [
+      370,
+      344
+    ],
+    "frameHeight": 194,
+    "canvasWidth": 204
+  },
+  "an": {
+    "official": "传说王者·修尔",
+    "element": "暗/魔神",
+    "detail": "http://aoqi.100bt.com/jingling/291858.html",
+    "sourceImage": "http://img4.a0bi.com/upload/articleResource/20180827/1535363199494.png",
+    "sourceSize": [
+      370,
+      344
+    ],
+    "frameHeight": 194,
+    "canvasWidth": 204
+  },
+  "mu": {
+    "official": "传说王者·阿瑞斯",
+    "element": "木/生命",
+    "detail": "http://aoqi.100bt.com/jingling/296843.html",
+    "sourceImage": "http://img4.a0bi.com/upload/articleResource/20190603/1559552204681.png",
+    "sourceSize": [
+      370,
+      344
+    ],
+    "frameHeight": 194,
+    "canvasWidth": 204
+  },
+  "shui": {
+    "official": "传说王者·帝释天",
+    "element": "水/冰",
+    "detail": "http://aoqi.100bt.com/jingling/295815.html",
+    "sourceImage": "http://img4.a0bi.com/upload/articleResource/20190318/1552911544803.png",
+    "sourceSize": [
+      370,
+      344
+    ],
+    "frameHeight": 194,
+    "canvasWidth": 204
+  },
+  "jin": {
+    "official": "传说王者·诺亚",
+    "element": "时空/光",
+    "detail": "http://aoqi.100bt.com/jingling/293589.html",
+    "sourceImage": "http://img4.a0bi.com/upload/articleResource/20181119/1542622829659.png",
+    "sourceSize": [
+      370,
+      344
+    ],
+    "frameHeight": 194,
+    "canvasWidth": 204
+  }
+}
