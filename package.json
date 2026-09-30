@@ -60,6 +60,7 @@
     "test:physics": "python test/pet-physics.py",
     "test:physics-live": "python test/physics-live.py",
     "test:capture": "python test/physics-capture.py",
+    "test:cleanup": "python test/physics-live.py --cleanup",
     "test:switch": "python test/switch-guard.py",
     "preview:client": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/shoot_client_ui.ps1",
     "assets:slice": "python tools/slice_pets.py",

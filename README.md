@@ -255,7 +255,10 @@ dsh-aoqi-pet/
 
 * **冒烟测试 53/53**（`node test/smoke.mjs`）：工具注册、事件→状态机、续写决策、真名/俗称切换、桌宠设置联动、`/api/aoqi-pet` 的 GET/POST 行为。
 * **客户端面契约 34/34**（`node test/client-ui.mjs`）：在假 `__ModuleLoader__` + 假 React + 假 `ctx.slots` 上真跑一遍 `lib/client.js`，逐条断言非 ESM、零顶层副作用、只 require 平台模块、id 等于包名、slot 注册形状、渲染与点击换宠物。
-* **物理单测 13/13**（`python test/pet-physics.py`）+ **物理真机 9/9**（`python test/physics-live.py`，连跑 3 次全绿）：自顶掉落→停在下方面（窗口底边 = 工作区底边）、合成甩动峰值约 9000px/s→撞 right/bottom/left→被重力拉回下方停稳。
+* **物理单测 13/13**（`python test/pet-physics.py`）+ **物理真机 10/10**（`python test/physics-live.py`，连跑多次全绿；第 10 项就是「收尸干净」自检）：自顶掉落→停在下方（窗口底边 = 工作区底边）、合成甩动→撞 right/bottom/left→被重力拉回下方停稳。
+* **测试脚本用完会自己收尸**：两个真机脚本都在判定里检查「没有残留的测试桌宠进程」。
+  万一桌面上还是多出了宠物，一条命令清掉（只清测试临时目录里的，不动你自己那只）：
+  `python test/physics-live.py --cleanup`（或 `npm run test:cleanup`）。
 * **真机证据图**（`python test/physics-capture.py`，自检不过就不落盘）：下面是**真机窗口位图 + 实测坐标**，
   不是画的示意图。轨迹图里灰线是重力下落、橙线是甩出去之后的实测轨迹，缩略图按实测坐标贴上去；胶片条是 6 帧 `PrintWindow` 位图。
 

@@ -21,6 +21,7 @@
 （第一版就踩了：1536x960 被当成屏幕尺寸）。
 """
 import argparse
+import atexit
 import ctypes
 import ctypes.wintypes as wintypes
 import json
@@ -33,6 +34,74 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "companion"))
 import petphysics  # noqa: E402
+
+# ── 防漏：这个脚本会在桌面上起真窗口，一旦漏掉就是用户桌面上多一只宠物 ──────────────
+# 踩过的坑：Phase.start() 里 Popen 已经把进程起起来了，但窗口 15 秒没出现时它返回 False，
+# 调用方直接 `return 2` 走人 —— 进程成了孤儿。一次连跑就漏了 3 只在桌面上。
+# 现在四层兜底：① start() 失败时自己收尸 ② 全局登记表 + atexit 无条件收尸
+# ③ 收尸用 taskkill /T /F 并复查 ④ 每次开跑先扫掉上一次的残留（只扫自己的临时目录）
+LIVE_PHASES = []
+_PET_MARKERS = ("aoqi_pet.py",)
+
+
+def _is_our_pet(command_line):
+    """只认「跑 aoqi_pet.py 且工作文件在 AppData\\Local\\Temp\\aoqi-* 下」的进程。
+
+    绝不匹配用户自己那只（它的工作目录是 ~/.dsh/aoqi-pet）—— 清理测试残留不能误伤真宠物。
+    """
+    if not command_line:
+        return False
+    if not all(marker in command_line for marker in _PET_MARKERS):
+        return False
+    lowered = command_line.lower()
+    return "\\appdata\\local\\temp\\aoqi-" in lowered
+
+
+def list_our_pets():
+    """列出残留的测试桌宠 [(pid, 命令行), ...]。用 PowerShell 查命令行，跨版本都可靠。"""
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^python' -and "
+              "$_.CommandLine -like '*aoqi_pet.py*' } | ForEach-Object { "
+              "$_.ProcessId.ToString() + '|' + $_.CommandLine }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                             capture_output=True, text=True, timeout=30)
+    except Exception:  # noqa: BLE001
+        return []
+    pets = []
+    for line in (out.stdout or "").splitlines():
+        if "|" not in line:
+            continue
+        pid, _, command_line = line.partition("|")
+        if _is_our_pet(command_line.strip()):
+            pets.append((int(pid), command_line.strip()))
+    return pets
+
+
+def sweep_leftovers(verbose=True):
+    """杀掉上一轮遗留的测试桌宠。返回杀掉的数量。"""
+    killed = 0
+    for pid, command_line in list_our_pets():
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        killed += 1
+        if verbose:
+            workdir = command_line.split("--state ", 1)[-1].split(" ", 1)[0]
+            print("  已清理上一轮残留的桌宠 PID %d（%s）" % (pid, workdir))
+    return killed
+
+
+def shutdown_phases(verbose=True):
+    """无条件收尸：所有登记过的相位实例。atexit 注册，正常返回/异常/早退都覆盖。
+
+    注意 TerminateProcess 杀掉本进程时 atexit 不会跑 —— 那种情况靠下次开跑的 sweep。
+    """
+    for phase in list(LIVE_PHASES):
+        if getattr(phase, "proc", None) is not None and phase.proc.poll() is None:
+            phase.stop(verbose=verbose)
+    LIVE_PHASES.clear()
+
+
+atexit.register(lambda: shutdown_phases(verbose=False))
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -126,6 +195,7 @@ class Phase:
             "--pet", self.pet, "--sound", "0", "--stale-exit-ms", "600000",
         ]
         self.proc = subprocess.Popen(args, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        LIVE_PHASES.append(self)          # 登记：早退/异常时由 shutdown_phases 兜底
         deadline = time.time() + 15
         self.hwnd = None
         while time.time() < deadline:
@@ -136,8 +206,13 @@ class Phase:
                 time.sleep(0.5)      # 等物理跑起来
                 return True
             if self.proc.poll() is not None:
+                LIVE_PHASES.remove(self) if self in LIVE_PHASES else None
                 return False
             time.sleep(0.15)
+        # ★ 关键：这里进程已经起来了，只是窗口没在 15 秒内出现。调用方会当成「没起来」直接返回，
+        #   如果不在这里收掉，桌面上就会多一只孤儿宠物（实测漏过 3 只）。
+        print("  ⚠️ 窗口 15 秒没出现，收掉这个进程 PID %d（避免留下孤儿桌宠）" % self.proc.pid)
+        self.stop()
         return False
 
     def sample(self, seconds, interval=0.08):
@@ -173,16 +248,26 @@ class Phase:
                 return samples, True, time.time() - started
         return samples, False, time.time() - started
 
-    def stop(self):
-        try:
-            self.proc.terminate()
-            self.proc.wait(timeout=6)
-        except Exception:  # noqa: BLE001
+    def stop(self, verbose=True):
+        """收尸：**总是**用 taskkill /T /F 连子进程一起杀，并复查确认真的没了。
+
+        第一版只有「terminate() 超时了才 taskkill」，而且没复查；
+        现在无论怎么退出都走同一条路，杀不干净会明确报出来（而不是悄悄留在桌面上）。
+        """
+        if getattr(self, "proc", None) is None:
+            return True
+        for attempt in (1, 2):
+            subprocess.run(["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
-                subprocess.run(["taskkill", "/PID", str(self.proc.pid), "/T", "/F"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.proc.wait(timeout=5)
+                break
             except Exception:  # noqa: BLE001
-                pass
+                if attempt == 2 and verbose:
+                    print("  ⚠️ 桌宠进程 %d 两次都没杀干净，请手动检查" % self.proc.pid)
+        if self in LIVE_PHASES:
+            LIVE_PHASES.remove(self)
+        return self.proc.poll() is not None
 
     def log_tail(self, lines=8):
         try:
@@ -241,9 +326,27 @@ def main():
                         help="额外验证失重实验开关（默认关闭的彩蛋功能）")
     parser.add_argument("--no-drag", action="store_true", help="不做合成鼠标甩动（不动你的鼠标）")
     parser.add_argument("--keep", action="store_true", help="保留临时目录便于看日志")
+    parser.add_argument("--cleanup", action="store_true",
+                        help="只清理以前跑测试遗留的桌宠进程，不做验证（桌面上多出宠物时用这个）")
     args = parser.parse_args()
 
+    if args.cleanup:
+        found = list_our_pets()
+        if not found:
+            print("没有发现测试遗留的桌宠进程（你自己那只不受影响）")
+            return 0
+        print("发现 %d 个测试遗留的桌宠进程，开始清理：" % len(found))
+        killed = sweep_leftovers()
+        time.sleep(0.8)
+        rest = list_our_pets()
+        print("已清理 %d 个；复查剩余 %d 个" % (killed, len(rest)))
+        return 0 if not rest else 1
+
     workdir = tempfile.mkdtemp(prefix="aoqi-physics-")
+    # 开跑前先扫掉上一次可能漏下的（比如上次被强杀、atexit 没机会跑）
+    swept = sweep_leftovers()
+    if swept:
+        print("已清理上一轮遗留的 %d 个测试桌宠进程" % swept)
     device_w = user32.GetSystemMetrics(0)
     device_h = user32.GetSystemMetrics(1)
     d_left, d_top, d_right, d_bottom = petphysics.work_area(device_w, device_h)
@@ -376,6 +479,14 @@ def main():
         for line in phase_c.log_tail(10):
             print("    " + line)
         phase_c.stop()
+
+    # ── 收尸自检：跑完之后桌面上不该还有属于测试临时目录的桌宠进程 ────────────────
+    shutdown_phases()
+    time.sleep(0.8)                       # 给 taskkill 一点时间落地
+    leftover = list_our_pets()
+    for pid, command_line in leftover:
+        print("  ✗ 还有测试桌宠没死：PID %d %s" % (pid, command_line[:120]))
+    checks.append(("收尸干净：没有残留的测试桌宠进程（桌面上不会多出宠物）", not leftover))
 
     print("\n=== 判定 ===")
     failed = 0

@@ -306,6 +306,8 @@ def main():
     print("屏幕 %dx%d；工作区 %s；透明键色 #%02x%02x%02x" % (device_w, device_h, work, *KEY))
 
     workdir = os.path.join(os.environ.get("TEMP", "."), "aoqi-capture")
+    # 开跑前先扫掉上一次可能漏下的测试桌宠（本脚本用同一批临时目录前缀）
+    live.sweep_leftovers()
     # 从屏幕中上方起手（x=800）：重力那一段是一条竖直线，甩动那一段全程留在屏幕内
     # （x=240 起手时，往左甩会把窗口挤出左边界，头几帧就不具代表性了）
     phase = live.Phase(workdir, live.base_settings(x=800, y=0))
@@ -431,6 +433,14 @@ def main():
     else:
         print("   ✗ 自检未全过 ⇒ **不落盘**：docs/ 里原有的图保持不动（不用坏证据覆盖好证据）")
         checks.append(("自检未全过时不覆盖已有证据图", False))
+
+    # 收尸自检：跑完之后桌面上不该还有属于测试临时目录的桌宠进程
+    live.shutdown_phases()
+    time.sleep(0.8)
+    leftover = live.list_our_pets()
+    for pid, command_line in leftover:
+        print("  ✗ 还有测试桌宠没死：PID %d %s" % (pid, command_line[:120]))
+    checks.append(("收尸干净：没有残留的测试桌宠进程（桌面上不会多出宠物）", not leftover))
 
     print("\n=== 判定 ===")
     failed = 0
