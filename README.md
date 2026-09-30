@@ -41,9 +41,9 @@
 
 ## 架构：为什么桌宠必须是另一个进程
 
-DSH 桌面端的宿主是 **Node 模式的宿主进程**，插件拿不到 Electron 主进程（所有 `@deepseek-ai` 包中都没有 `from 'electron'`，也没有 Tray/Notification API）。所以插件**开不了窗口**。
+DSH 桌面端的宿主是 **Node 模式的宿主进程**，而 `Tray` / `Notification` / `BrowserWindow` 这些能力**只存在于桌面壳自己的 Electron 主进程**里 —— 插件跑在 profile/agent 这一侧，取不到 `electron` 模块（字节级核对：`app.asar` 里 `new Tray` 与 `new Notification` 各只有 1 处，都在壳的 `DesktopTray` 与更新提醒里；`require('electron')` 0 处）。所以**插件开不了窗口、也弹不了系统通知**。核对方法与全部数字见 [docs/CONVENTIONS.md](docs/CONVENTIONS.md) 第 4 节。
 
-于是分成两边，中间用一个文件桥连接：
+于是分成两边，中间用一个文件桥连接（这也正是「宠物要跳脱到软件之外」的技术必然）：
 
 ```
 ┌─────────────────────────── DeepSeek Harness（宿主进程，插件在这里）───────────────────────────┐
@@ -194,7 +194,7 @@ dsh-aoqi-pet/
 ├── tools/                素材流水线：切片 / 合成动画 / 官方高清 / 抓取（可复现）
 ├── test/smoke.mjs        自包含冒烟测试（44 项断言，不装依赖）
 ├── test/switch-guard.py  切换回归测试：隔离实例 + 钉死宿主状态，验证选择不被弹回
-├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）
+├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）、参考规范（CONVENTIONS.md）
 ├── cordis.patch.yml      组合包 patch：把插件行插进 profile
 └── package.json          dsh.bundle.patch + dsh.catalog 元数据
 ```
@@ -230,6 +230,9 @@ dsh-aoqi-pet/
 * **切换回归测试 6/6**（`python test/switch-guard.py`）：自己起一个隔离桌宠实例、把宿主状态钉死在会触发回弹的值上，断言用户的选择不会被宿主状态覆盖；并做了**负向对照**（把旧逻辑装回去，同一测试 5/6 失败）证明它真的能抓 bug。
 * 真实宿主热加载、桌宠进程自动拉起（1.5 秒重生）、窗口截图、相邻帧像素差、状态文件与 HTTP 路由读取。
 * 官方高清素材 25 个 GIF 的帧数/时长/透明三重自检，三种素材偏好的加载实测。
+* **参考与前提核对**：[docs/CONVENTIONS.md](docs/CONVENTIONS.md) —— 逐项列出参考了本 profile 里
+  `plugins/image-generation/index.js` 的哪些接缝写法（裸 `ctx.tools.register` + `output.schema/render`、零依赖、`insert:` 挂载），
+  以及 `app.asar` 的字节级扫描结果（Tray/Notification 只在 Electron 主进程里，插件侧取不到）。
 
 ## 常见问题
 
