@@ -302,19 +302,63 @@ def main():
             print("  ✗ 没能找到桌宠窗口")
             return 2
         scale_c = scale_of(phase_c.hwnd)
-        rect = rect_of(phase_c.hwnd)
-        grab_x = rect[0] + rect[2] // 2
-        grab_y = rect[1] + int(rect[3] * 0.62)      # 抓宠物身体（不是透明区）
-        set_cursor(grab_x, grab_y)
-        time.sleep(0.2)
-        mouse(0x0002)                                # LEFTDOWN
-        for i in range(1, 14):                       # 快速往左下甩
-            set_cursor(grab_x - i * 28, grab_y + i * 8)
-            time.sleep(0.011)
-        mouse(0x0004)                                # LEFTUP
+
+        # 先等它落稳再按鼠标：窗口刚出现时桌宠的 <ButtonPress-1> 还没绑定完，
+        # 这时候合成点击会被丢掉（实测：不等的话 6 个抓取点全都「没抓住」）。
+        # 顺带这也给了相位 C 一个干净起点（从下方静止开始甩）。
+        pre_c, pre_settled, _ = phase_c.wait_settled(10.0)
+        if pre_settled and pre_c:
+            print("  起手前已落稳在 y=%.0f（逻辑）" % (pre_c[-1][2] / scale_c))
+        else:
+            print("  起手前没等到落稳，仍然继续（可能更慢）")
+
+        def synthetic_throw(ratio, dx):
+            """合成一次甩出。返回 False = 这一下没抓住。
+
+            桌宠窗口是 -transparentcolor 的，透明区会把点击透给下层窗口，合成鼠标偶尔就「点空」
+            （实测：一次跑下来幅度只有 77px，看着像物理坏了，其实是没点到）。
+            所以按下后先小挪一下验证窗口真的跟着动了，再继续甩；没抓住就立刻松手换点。
+            """
+            rect = rect_of(phase_c.hwnd)
+            grab_x = rect[0] + rect[2] // 2 + dx
+            grab_y = rect[1] + int(rect[3] * ratio)
+            set_cursor(grab_x, grab_y)
+            time.sleep(0.18)
+            mouse(0x0002)
+            time.sleep(0.05)
+            set_cursor(grab_x - 40, grab_y - 8)
+            time.sleep(0.06)
+            if abs(rect_of(phase_c.hwnd)[0] - rect[0]) < 15:
+                mouse(0x0004)
+                return False
+            for i in range(2, 20):
+                set_cursor(grab_x - i * 34, grab_y - i * 15)
+                time.sleep(0.007)
+            mouse(0x0004)
+            return True
+
         # 甩出去之后会被重力拉回底部，所以「起终点差」会互相抵消；
         # 要看的是**运动幅度**（相对起点最远跑到哪）。等它自己停稳再判（最长 15 秒）。
-        samples_c, settled_c, took_c = phase_c.wait_settled(15.0)
+        samples_c, settled_c, took_c = [], False, 0.0
+        for attempt, (ratio, dx) in enumerate(
+                [(0.62, 0), (0.70, 0), (0.55, 0), (0.62, -30), (0.70, 20), (0.62, 30)], start=1):
+            if not synthetic_throw(ratio, dx):
+                print("  第 %d 次没抓住（抓取点 %.0f%%、偏移 %+d），换点重试" % (attempt, ratio * 100, dx))
+                time.sleep(0.2)
+                continue
+            samples_c, settled_c, took_c = phase_c.wait_settled(15.0)
+            if not samples_c:
+                print("  第 %d 次抓住了但没采到样，重试" % attempt)
+                continue
+            xs_ = [s[1] for s in samples_c]
+            ys_ = [s[2] for s in samples_c]
+            amplitude = max(max(xs_) - min(xs_), max(ys_) - min(ys_)) / scale_c
+            if phase_c.log_has("甩出：") and amplitude >= 250:
+                print("  第 %d 次生效（抓取点 %.0f%%、偏移 %+d，幅度 %.0f 逻辑px）"
+                      % (attempt, ratio * 100, dx, amplitude))
+                break
+            print("  第 %d 次幅度只有 %.0f 逻辑px，换点重试" % (attempt, amplitude))
+
         info_c = describe(samples_c, "甩出后（等停稳）", scale_c)
         c_bottom_logical = d_bottom / scale_c
         c_win_h = rect_of(phase_c.hwnd)[3] / scale_c

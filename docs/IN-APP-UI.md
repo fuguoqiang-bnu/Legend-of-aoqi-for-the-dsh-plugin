@@ -72,6 +72,27 @@ POST /api/aoqi-pet?action=poke         → 桌宠冒泡「我在这儿！」
 **配套的宿主侧验证**（`node test/smoke.mjs`，53 项）：`GET` 返回 `state/pets/files` 与 `no-store`、
 `POST next-pet` 真的轮换并写设置文件（`an → mu`）、`POST poke` 冒泡、未知 action 返回 400 不崩。
 
+### 4.1 它长什么样（本地 harness 渲染）
+
+![界面内小宠物：亮色 / 暗色 / 工具卡片](in-app-dock.png)
+
+复跑：
+
+```bash
+node test/client-ui.mjs                  # 契约测试（34 项）
+pwsh -File tools/shoot_client_ui.ps1     # 用无头 Edge 渲染 test/client-ui-preview.html → docs/in-app-dock.png
+# 或 npm run preview:client
+```
+
+这张图是 **harness 渲染**，不是 DSH 里的截图 —— 页面顶部那条红字就是标注，避免被误当成真机界面。
+它同样有真东西：**真 Chromium** + 仓库里**同一份 `lib/client.js`**（通过一个假的 `window.__ModuleLoader__`），
+所以它验证的是「组件代码 + 主题 token + SVG 在明暗两套主题下渲染正常」。
+React 用的是等价 shim（`createElement` / `useState` / `useEffect` / `useRef` + 极简 DOM 渲染器），
+因为不重启 DSH 就没法把 bundle 交给真的模块加载器。
+
+`tools/shoot_client_ui.ps1` 里记了两个坑：**别加 `--virtual-time-budget`**（页面里的轮询定时器会让无头 Chromium
+永不退出，实测挂死），清理时**只杀 `--headless` 的主进程**（按名字杀 `msedge.exe` 会把你自己开着的浏览器一起关掉）。
+
 **还没验证的（写清楚，不含糊）**：
 
 * **界面里真的出现的样子**：需要 DSH 重启加载 bundle，我没法在不重启的前提下截图核实 ——

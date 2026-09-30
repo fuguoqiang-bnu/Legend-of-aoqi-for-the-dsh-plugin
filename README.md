@@ -208,10 +208,13 @@ dsh-aoqi-pet/
 │   ├── pets/names.json   五王真名与官方出处（图鉴链接、立绘 URL）
 │   └── theme/            platform.png（生图站台，抠白底后用）、aoqi-icon.png（官方 logo，收起态）、*-raw.png（生图原图）
 ├── tools/                素材流水线：切片 / 合成动画 / 官方高清 / 抓取 / 文档演示图（可复现）
+├── tools/shoot_client_ui.ps1    用无头 Edge 渲染 test/client-ui-preview.html → docs/in-app-dock.png
 ├── test/smoke.mjs        自包含冒烟测试（53 项断言，不装依赖）
 ├── test/client-ui.mjs    客户端面契约测试（34 项：假 __ModuleLoader__ + 假 React 真跑 bundle）
+├── test/client-ui-preview.html  本地 harness：在真 Chromium 里渲染那只小宠物（明暗两套主题）
 ├── test/pet-physics.py   物理单测（13 项：重力/反弹/衰减/不穿墙/dt 无关性）
 ├── test/physics-live.py  物理真机验证（Win32 量真实窗口矩形：落下→落底、甩出→撞框→回底）
+├── test/physics-capture.py  物理真机截图（PrintWindow 抓窗口位图 → 轨迹图 + 胶片条，自带防假证据自检）
 ├── test/switch-guard.py  切换回归测试：隔离实例 + 钉死宿主状态，验证选择不被弹回
 ├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）、物理（PHYSICS.md）、界面内宠物（IN-APP-UI.md）、参考规范（CONVENTIONS.md）
 ├── cordis.patch.yml      组合包 patch：把插件行插进 profile
@@ -253,6 +256,18 @@ dsh-aoqi-pet/
 * **冒烟测试 53/53**（`node test/smoke.mjs`）：工具注册、事件→状态机、续写决策、真名/俗称切换、桌宠设置联动、`/api/aoqi-pet` 的 GET/POST 行为。
 * **客户端面契约 34/34**（`node test/client-ui.mjs`）：在假 `__ModuleLoader__` + 假 React + 假 `ctx.slots` 上真跑一遍 `lib/client.js`，逐条断言非 ESM、零顶层副作用、只 require 平台模块、id 等于包名、slot 注册形状、渲染与点击换宠物。
 * **物理单测 13/13**（`python test/pet-physics.py`）+ **物理真机 9/9**（`python test/physics-live.py`，连跑 3 次全绿）：自顶掉落→停在下方面（窗口底边 = 工作区底边）、合成甩动峰值约 9000px/s→撞 right/bottom/left→被重力拉回下方停稳。
+* **真机证据图**（`python test/physics-capture.py`，自检不过就不落盘）：下面是**真机窗口位图 + 实测坐标**，
+  不是画的示意图。轨迹图里灰线是重力下落、橙线是甩出去之后的实测轨迹，缩略图按实测坐标贴上去；胶片条是 6 帧 `PrintWindow` 位图。
+
+  ![物理互动真机轨迹](docs/physics-live.png)
+
+  ![真机窗口位图胶片](docs/physics-frames.png)
+
+* **界面内小宠物长什么样**（`pwsh -File tools/shoot_client_ui.ps1`）：输入框旁边那只，亮/暗两套主题 + `aoqi_pet_status` 工具卡片。
+  这是**本地 harness 渲染**（真 Chromium + 同一份 `lib/client.js`，React 用等价 shim），**不是 DSH 里的截图** ——
+  DSH 里的位置需要重启后肉眼看，图上也标了这句话。
+
+  ![界面内小宠物（本地 harness 渲染）](docs/in-app-dock.png)
 * **切换回归测试 6/6**（`python test/switch-guard.py`）：自己起一个隔离桌宠实例、把宿主状态钉死在会触发回弹的值上，断言用户的选择不会被宿主状态覆盖；并做了**负向对照**（把旧逻辑装回去，同一测试 5/6 失败）证明它真的能抓 bug。
 * 真实宿主热加载、桌宠进程自动拉起（1.5 秒重生）、窗口截图、相邻帧像素差、状态文件与 HTTP 路由读取。
 * 官方高清素材 25 个 GIF 的帧数/时长/透明三重自检，三种素材偏好的加载实测。

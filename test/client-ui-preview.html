@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>奥奇桌宠 · 界面内小宠物（本地渲染 harness）</title>
+<!--
+  这是什么：本地渲染 harness，用来**看** lib/client.js 里那只小宠物长什么样。
+
+  为什么要它：真·界面内小宠物必须由 DSH 启动时组装客户端 bundle 才会出现，
+  而「启动时」意味着要重启 DSH；这一步做不到时，用这个页面在**真 Chromium**里
+  跑**同一份 lib/client.js**（通过下面那个假的 window.__ModuleLoader__），
+  就能验证布局/配色/SVG/主题 token 是不是对的。
+
+  React 用的是等价 shim（createElement / useState / useEffect / useRef + 极简 DOM 渲染），
+  因为宿主不重启就没法把 bundle 交给真的模块加载器。所以：
+  ✅ 能证明：组件代码本身渲染正常、只用主题 token、明暗两套主题都好看
+  ❌ 不能证明：DSH 里插槽位置/宿主真实 props —— 那需要重启 DSH 后肉眼看
+-->
+<style>
+  :root {
+    --dsw-alias-bg-primary: #ffffff;
+    --dsw-alias-bg-secondary: #f2f4f8;
+    --dsw-alias-bg-tertiary: #e6eaf2;
+    --dsw-alias-border-secondary: rgba(20, 30, 50, .18);
+    --dsw-alias-text-primary: #161c26;
+    --dsw-alias-text-secondary: #5b6474;
+    --dsw-alias-text-tertiary: #8b93a3;
+  }
+  .dark {
+    --dsw-alias-bg-primary: #16181d;
+    --dsw-alias-bg-secondary: #23262d;
+    --dsw-alias-bg-tertiary: #2d3138;
+    --dsw-alias-border-secondary: rgba(220, 230, 245, .18);
+    --dsw-alias-text-primary: #e9edf4;
+    --dsw-alias-text-secondary: #a7b0bf;
+    --dsw-alias-text-tertiary: #7d8695;
+  }
+  body { margin: 0; font: 14px/1.5 "Microsoft YaHei", system-ui, sans-serif; }
+  .band { padding: 18px 22px; }
+  .label { font-size: 12px; letter-spacing: .02em; opacity: .75; margin-bottom: 8px; }
+  .composer {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-radius: 14px; border: 1px solid var(--dsw-alias-border-secondary);
+    background: var(--dsw-alias-bg-primary); color: var(--dsw-alias-text-primary);
+    max-width: 760px;
+  }
+  .composer__input {
+    flex: 1; color: var(--dsw-alias-text-tertiary);
+    padding: 6px 10px; border-radius: 10px; background: var(--dsw-alias-bg-secondary);
+  }
+  .composer__send {
+    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--dsw-alias-bg-tertiary); color: var(--dsw-alias-text-secondary); font-size: 15px;
+  }
+  .note { font-size: 12px; color: #b23b2e; background: #ffeceb; border: 1px solid #ffc9c3;
+          padding: 8px 12px; border-radius: 8px; margin: 14px 22px 0; }
+</style>
+</head>
+<body>
+<div class="note">
+  本地 harness 渲染（真 Chromium + 仓库里同一份 <code>lib/client.js</code>，React 用等价 shim）——
+  <b>不是 DSH 里的截图</b>：DSH 里的位置/宿主 props 需要重启 DSH 后肉眼看。
+</div>
+
+<div class="band" id="band-light">
+  <div class="label">亮色主题 · 输入框停靠位（conversation.composer.dock）</div>
+  <div class="composer">
+    <div class="composer__input">有什么可以帮你的？</div>
+    <span id="dock-light"></span>
+    <div class="composer__send">↑</div>
+  </div>
+</div>
+
+<div class="band dark" id="band-dark" style="background:var(--dsw-alias-bg-primary)">
+  <div class="label">暗色主题 · 同一份组件、同一批主题 token</div>
+  <div class="composer">
+    <div class="composer__input">有什么可以帮你的？</div>
+    <span id="dock-dark"></span>
+    <div class="composer__send">↑</div>
+  </div>
+</div>
+
+<div class="band" id="band-tool">
+  <div class="label">工具结果卡片（tool.call.toolview，key = aoqi_pet_status）</div>
+  <div id="tool"></div>
+</div>
+
+<script>
+// ── 假宿主①：极简 React（等价 shim，只实现组件用到的那几个 API）─────────────────
+(function () {
+  let current = null;
+  let pendingEffects = [];
+  let rootRender = null;
+  // 每个组件函数持有一份稳定的 hook 实例：否则每次重绘都新建实例，
+  // fetch 回来的状态会被立刻丢掉（第一次截图就踩了这个，停留在默认值上）。
+  const instances = new WeakMap();
+
+  function flatten(list) {
+    return list.flat(Infinity).filter((x) => x !== null && x !== undefined && x !== false && x !== true);
+  }
+  function renderComponent(fn, props) {
+    let instance = instances.get(fn);
+    if (!instance) { instance = { hooks: [], ranEffects: [] }; instances.set(fn, instance); }
+    instance.index = 0;
+    const previous = current;
+    current = instance;
+    const out = fn(props);
+    current = previous;
+    return out;
+  }
+  const React = {
+    createElement(type, props, ...children) {
+      const merged = Object.assign({}, props || {}, { children: flatten(children) });
+      if (typeof type === 'function') return renderComponent(type, merged);
+      return { __el: true, type, props: merged };
+    },
+    useState(initial) {
+      const instance = current;
+      const slot = instance.index++;
+      if (!(slot in instance.hooks)) instance.hooks[slot] = typeof initial === 'function' ? initial() : initial;
+      return [instance.hooks[slot], (next) => {
+        instance.hooks[slot] = typeof next === 'function' ? next(instance.hooks[slot]) : next;
+        setTimeout(rootRender, 0);
+      }];
+    },
+    useEffect(fn) {
+      const instance = current;
+      const slot = instance.index++;
+      if (!instance.ranEffects[slot]) { instance.ranEffects[slot] = true; pendingEffects.push(fn); }  // 空依赖 ⇒ 只跑一次
+    },
+    useRef(initial) {
+      const instance = current;
+      const slot = instance.index++;
+      if (!(slot in instance.hooks)) instance.hooks[slot] = { current: initial };
+      return instance.hooks[slot];
+    },
+    Fragment: 'fragment',
+  };
+
+  function toDom(node) {
+    if (node === null || node === undefined || node === false || node === true) return document.createTextNode('');
+    if (typeof node === 'string' || typeof node === 'number') return document.createTextNode(String(node));
+    if (Array.isArray(node)) {
+      const fragment = document.createDocumentFragment();
+      node.forEach((child) => fragment.appendChild(toDom(child)));
+      return fragment;
+    }
+    if (node.type === 'fragment') return toDom(node.props.children);
+    // SVG 子元素必须用 SVG 命名空间建，否则 path/ellipse 根本画不出来；
+    // 普通标签必须用 createElement（createElementNS(null, 'div') 建出来的不是 HTML 元素，CSS 类会失效）
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const SVG_TAGS = { svg: 1, path: 1, ellipse: 1, circle: 1, text: 1, g: 1, rect: 1, line: 1, polygon: 1 };
+    const el = SVG_TAGS[node.type]
+      ? document.createElementNS(SVG_NS, node.type)
+      : document.createElement(node.type);
+    Object.entries(node.props || {}).forEach(([key, value]) => {
+      if (key === 'children' || value === null || value === undefined) return;
+      if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
+      else if (key === 'className') el.setAttribute('class', value);
+      else if (/^on[A-Z]/.test(key) && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
+      else if (value === true) el.setAttribute(key, '');
+      else el.setAttribute(key, String(value));
+    });
+    (node.props.children || []).forEach((child) => el.appendChild(toDom(child)));
+    return el;
+  }
+
+  window.__REACT_SHIM__ = { React, toDom, setRootRender: (fn) => { rootRender = fn; }, takeEffects: () => { const out = pendingEffects; pendingEffects = []; return out; } };
+})();
+
+// ── 假宿主②：__ModuleLoader__ + slots + fetch（喂一份和真机一样的 state 快照）─────
+(function () {
+  const shim = window.__REACT_SHIM__;
+  const registered = [];
+  const ctx = {
+    effect(fn) { const dispose = fn(); return dispose; },
+    slots: {
+      inject(key, callback) { return callback(); },
+      register(options, component) { registered.push({ options, component }); return () => {}; },
+    },
+  };
+  window.__ModuleLoader__ = {
+    load(record) {
+      if (record.id !== 'dsh-aoqi-pet') throw new Error('id 不对：' + record.id);
+      const exports_ = record.factory((name) => {
+        if (name === 'react') return shim.React;
+        throw new Error('harness 只提供了 react，组件却 require 了：' + name);
+      });
+      exports_.apply(ctx);
+      window.__AOQI_REGISTERED__ = registered;
+    },
+  };
+  // 和宿主 GET /api/aoqi-pet 返回的结构一致
+  window.fetch = (url) => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({
+      ok: true,
+      state: {
+        petId: 'huo', petName: '龙炎', animation: url.indexOf('next-pet') >= 0 ? 'working' : 'working',
+        headline: '正在使用 edit…', bubble: null, muted: false, paused: false,
+        stats: { turns: 12, completions: 5, truncations: 2, autoContinues: 3 },
+      },
+      pets: { huo: { name: '龙炎' } },
+    }),
+  });
+  // 截图专用：组件用 setInterval 每 1.5s 拉一次状态，页面因此永不 idle，
+  // 无头 Chromium 的 --screenshot 会一直等下去（实测挂住）。这里把 setInterval 降级成
+  // 「只再拉一次」，静态截图看的是同一份 DOM，行为差异仅限轮询频率。
+  if (location.search.indexOf('once=1') >= 0) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setInterval = (fn, ms) => { nativeSetTimeout(fn, ms); return 0; };
+    window.clearInterval = () => {};
+  }
+})();
+</script>
+<script src="../lib/client.js"></script>
+<script>
+(function () {
+  const shim = window.__REACT_SHIM__;
+  const registrations = window.__AOQI_REGISTERED__ || [];
+  const dock = registrations.find((r) => r.options.name === 'conversation.composer.dock');
+  const tool = registrations.find((r) => r.options.name === 'tool.call.toolview');
+  const mount = () => {
+    const runEffects = () => shim.takeEffects().forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
+    // 必须通过 createElement 渲染（而不是直接调 component(...)）：
+    // shim 的 hook 上下文是在 createElement→renderComponent 里建立的，直接调会 useState 报错
+    const render = (Component, props) => shim.toDom(shim.React.createElement(Component, props));
+    const paint = () => {
+      if (dock) {
+        document.getElementById('dock-light').replaceChildren(render(dock.component, {}));
+        document.getElementById('dock-dark').replaceChildren(render(dock.component, {}));
+      }
+      if (tool) {
+        document.getElementById('tool').replaceChildren(render(tool.component, {
+          result: { text: '宠物：龙炎（huo）\n动画：working（正在使用 edit…）\n统计：回合 12 / 完成 5 / 截断续写 3' },
+        }));
+      }
+      runEffects();
+    };
+    shim.setRootRender(paint);
+    paint();
+  };
+  mount();
+  window.__AOQI_HARNESS_READY__ = true;
+})();
+</script>
+</body>
+</html>

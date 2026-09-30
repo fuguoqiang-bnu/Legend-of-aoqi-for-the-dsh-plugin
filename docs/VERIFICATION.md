@@ -380,6 +380,18 @@ python test/physics-live.py     # 真机：隔离实例 + Win32 GetWindowRect �
   并且**断言只用「窗口底边 = 工作区底边」这种与坐标系无关的量**（桌宠日志里的 y=600 与脚本里的 y=750
   是同一个物理位置：600 × 1.25 = 750）。
 
+**真机截图**（`python test/physics-capture.py`，9/9）：
+
+![物理互动真机轨迹](physics-live.png)
+
+![真机窗口位图胶片](physics-frames.png)
+
+* 位图来自 `PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)`，位置来自 `GetWindowRect`，撞击记录来自桌宠日志 —— 图上没有一处是示意画。
+* 脚本的自检会拦住假证据：非透明像素占比（拍空白）、帧间差异（同一张复制）、位置跨度（没真的动）、
+  「日志里有没有『甩出：』」（合成鼠标到底有没有点到宠物）。**任一不过就不落盘。**
+* 写这个脚本时踩了三个坑，都记在 [PHYSICS.md](PHYSICS.md) §3.1 里：`PrintWindow` 两种 flag 下透明区分别是黑/键色；
+  Pillow `floodfill` 在「填充色离种子色太近」时会**静默不干活**；以及一次失败的运行把好图覆盖了（因此改成自检全过才落盘）。
+
 ## 19. 进入 DSH 界面（客户端面）：契约 34/34 + 路由 9 项
 
 ```bash
@@ -396,3 +408,13 @@ node test/smoke.mjs         # 其中 9 项是 /api/aoqi-pet 的 GET/POST 行为
 这一步我没法在不重启的前提下自证 —— 安装后请自己看一眼输入框旁边。
 另外第三方仓库场景下「改 `lib/client.js` 靠重装还是重启生效」**未确证**，稳妥做法是重启 DSH。
 详见 [IN-APP-UI.md](IN-APP-UI.md) 第 4 节。
+
+**能自证的那一半：本地 harness 渲染**（`pwsh -File tools/shoot_client_ui.ps1`）：
+
+![界面内小宠物：亮色 / 暗色 / 工具卡片](in-app-dock.png)
+
+真 Chromium + 仓库里同一份 `lib/client.js`（假 `window.__ModuleLoader__` + 等价 React shim），
+验证的是组件代码、主题 token、SVG 在明暗两套主题下都渲染正常（「龙炎 干活中 · 回合12 完成5 续写3」）。
+图里顶部有红字标注**这不是 DSH 里的截图**，避免把 harness 结果当成真机证据。
+渲染时踩的坑：`--virtual-time-budget` 遇到页面里的轮询定时器会让无头 Chromium 永不退出（挂死 60s+）；
+清理时只杀 `--headless` 主进程，不能按名字杀 `msedge.exe`（会关掉用户正在用的浏览器）。
