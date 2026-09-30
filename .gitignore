@@ -25,3 +25,9 @@ assets/fetched/*
 # 这既不合「只关心页游」的口径，也不合「第三方图不入库」的规矩，所以用通配挡住。
 assets/fetched*/
 !assets/fetched/SOURCES.md
+
+# 防越界：并行任务曾把「2x 放大」的素材（hi2x/art）直接写进 pets 目录。
+# 这两套都没接线（桌宠只认 frames / hires），而且是把 122px 帧硬放大的糊图，
+# 与「不把低清图硬拉大」的设计相反 —— 一律不入库。
+assets/pets/*/hi2x/
+assets/pets/*/art/
