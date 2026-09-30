@@ -50,7 +50,8 @@
     "assets:slice": "python tools/slice_pets.py",
     "assets:anim": "python tools/make_anim.py",
     "assets:hires": "python tools/hires_build.py",
-    "assets:fetch": "python tools/fetch_assets.py"
+    "assets:fetch": "python tools/fetch_assets.py",
+    "assets:demo": "python tools/make_doc_demo.py"
   },
   "keywords": [
     "dsh-plugin",

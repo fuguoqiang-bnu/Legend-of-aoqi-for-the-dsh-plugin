@@ -185,3 +185,12 @@ assets/pets/hires-index.json                       每只的官方名、图鉴�
 * 请勿将本仓库中的任何美术资源用于商业用途、二次分发或任何可能侵犯著作权的场景；
   如需商用，请自行联系版权方获得授权。
 * 若权利人认为本仓库内容不当，请通过 issue 联系，我们会在确认后**立即删除**相关文件。
+
+## make_doc_demo.py —— README 动态演示图
+
+把仓库里**真实的素材帧**（左 rames / 右 hires，各 16 帧 × 5 状态）贴到**生图极光原图**上当背景，
+合成 docs/demo.gif（默认 640×320、25 帧、无限循环、≤1.2MB，按颜色阶梯压体积）。
+它不是截图摆拍：帧就是从 ssets/pets/<id>/ 直接读的，所以演示图 = 桌宠实际会动成的样子。
+
+    python tools/make_doc_demo.py --pet huo            # 默认输出 docs/demo.gif
+    python tools/make_doc_demo.py --pet shui --width 720 --height 360 --max-kb 1600
