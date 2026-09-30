@@ -190,7 +190,7 @@ dsh-aoqi-pet/
 │   ├── pets/<id>/        base/f00..f15.png、5 个状态 GIF、portrait.png、hires/（官方高清素材 + source.png）
 │   ├── pets/index.json   每只宠物的元数据与文件清单
 │   ├── pets/names.json   五王真名与官方出处（图鉴链接、立绘 URL）
-│   └── theme/            站台底座、极光背景（gpt-image 生成 + 抠底）、aoqi-icon.png（收起图标）
+│   └── theme/            platform.png（生图站台，抠白底后用）、aoqi-icon.png（官方 logo，收起态）、*-raw.png（生图原图）
 ├── tools/                素材流水线：切片 / 合成动画 / 官方高清 / 抓取（可复现）
 ├── test/smoke.mjs        自包含冒烟测试（44 项断言，不装依赖）
 ├── test/switch-guard.py  切换回归测试：隔离实例 + 钉死宿主状态，验证选择不被弹回
@@ -218,7 +218,7 @@ dsh-aoqi-pet/
   python tools/hires_build.py --offline  # 只用本地已下载的 source.png
   ```
 
-* **站台底座与极光背景**由内置生图能力（`gpt-image-2.5-flare`）生成，`assets/theme/*-raw.png` 保留原图便于再加工。
+* **站台底座与 README 头图背景**由内置生图能力（`gpt-image-2.5-flare`）生成：站台抠白底成透明 `assets/theme/platform.png`（就画在宠物脚下，每一帧都在），极光原图作 `docs/hero.png` 的背景；`assets/theme/*-raw.png` 保留原图便于再加工。收起态用的 `aoqi-icon.png` 是官方 logo。
 * **版权声明**：**《奥奇传说》及其角色形象版权归百田信息科技（百田/百奥家庭互动）所有**。本仓库是粉丝向技术演示，素材仅供**个人学习与本地使用，禁止商用、禁止二次分发为商业素材**；仓库中的 **MIT 许可只覆盖代码**（`lib/`、`companion/`、`tools/`、`test/`），不覆盖 `assets/` 下的美术资源。如果你是版权方并要求移除，请开 issue，我会立刻处理。
 * 五只宠物的中文名不是自取的，而是**页游官方图鉴里的真名**：传说五王 = **龙炎 / 诺亚 / 帝释天 / 修尔 / 阿瑞斯**（诺雅是诺亚的妹妹，不在五王之列）。考证过程、官方链接、以及「哪只对应哪个名字」的逐项比对见 [docs/NAMES.md](docs/NAMES.md) 与 `assets/pets/names.json`。
 

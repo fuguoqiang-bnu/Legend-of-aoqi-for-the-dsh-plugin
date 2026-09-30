@@ -20,3 +20,8 @@ tools/out/
 # 抓取到的第三方图片不入库（版权原因），只保留来源记录
 assets/fetched/*
 !assets/fetched/SOURCES.md
+# fetched2/ 及以后任何「再来一批」的抓取目录同样不入库：
+# 有一次并行任务把一批官图（含一张 7.3MB 的**手游** KV）直接写进了 fetched2/，
+# 这既不合「只关心页游」的口径，也不合「第三方图不入库」的规矩，所以用通配挡住。
+assets/fetched*/
+!assets/fetched/SOURCES.md
