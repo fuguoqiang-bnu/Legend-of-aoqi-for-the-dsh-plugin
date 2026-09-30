@@ -4,7 +4,7 @@
 
 # 奥奇桌宠 · 小五王 · dsh-aoqi-pet
 
-**给 DeepSeek Harness 装一只跑在软件外面的奥奇桌宠：干活时它在动，干完活它喊你，输出被截断它自动接着写。**
+**给 DeepSeek Harness 装一只奥奇桌宠：桌面上的它会掉下来、能被你甩出去撞边框，DSH 输入框旁边还有一只同步的小的；干活时它在动，干完活它喊你，输出被截断它自动接着写。**
 
 `DeepSeek Harness 插件` · `Python 3 · tkinter（零第三方依赖）` · `Windows` · `MIT`
 
@@ -33,6 +33,8 @@
 | 能力 | 说明 |
 | --- | --- |
 | 🐾 **跳出软件的桌宠** | 独立进程 + 置顶透明窗口，**DSH 最小化时依然可见**，可以在桌面上拖动、不会被聊天窗口盖住 |
+| 🪂 **重力 + 甩动 + 撞边框** | 重力常开、宠物常态待在屏幕下方；**拎起来往外甩**会带着惯性飞出去、撞到屏幕边框会弹（火花 + 抖动），最后被重力拉回下方停稳。实测甩出峰值 9084px/s、撞过 right/bottom/left 三边。见 [docs/PHYSICS.md](docs/PHYSICS.md) |
+| 🖥️ **也活在 DSH 界面里** | 输入框旁边挂一只**同状态源**的小宠物（`conversation.composer.dock`）：跟着显示待机/干活/完成/出错/等你 + 回合统计，**点一下就换下一只五王**，桌面那只同步换人。见 [docs/IN-APP-UI.md](docs/IN-APP-UI.md) |
 | 🎞️ **真·动画，不是静态贴图** | 传说五王（页游官方名）：龙炎 / 诺亚 / 帝释天 / 修尔 / 阿瑞斯 —— 你给的素材是它们的**初始形态**小炎 / 小诺 / 小天 / 阿修 / 阿瑞；每只 **16 帧**，派生 5 种状态动画（待机 / 工作 / 完成 / 出错 / 等待） |
 | 🖼️ **两套素材随时切** | 右键「素材用官方高清立绘」：**页游官网图鉴立绘 370×344 降采样**（清晰）↔ 你给的 **原味 16 帧逐帧动画**（Q 版可爱）。见 [docs/HIRES.md](docs/HIRES.md) |
 | 🪟 **可收起为静态图标** | 右键「收起为图标（静态）」→ 只留一枚**页游官方 logo 做的圆角图标** + 状态点（灰/青/绿/红/橙），不播动画、只占 78×78；展开锚定右下角，状态写回配置 |
@@ -40,8 +42,8 @@
 | 🔔 **完成 / 出错 / 等待提醒** | 桌宠跳跃 + 气泡 + 可选 Windows 系统通知 + 提示音（可用右键静音） |
 | ♻️ **截断自动续写** | 检测 `reason: max-tokens` 的回合结束，自动补发「继续」，带**宽限期 / 冷却 / 连击上限**三重防死循环 |
 | 🛠️ **让模型主动汇报** | 内置 `aoqi_pet_say` / `aoqi_pet_status` / `aoqi_pet_switch` 三个工具，长任务的关键节点由模型自己捅一下桌宠 |
-| 🌐 **可选状态接口** | 注册 `GET /api/aoqi-pet`，外部脚本/自检能读到完整运行状态 JSON |
-| 📦 **零依赖零构建** | 不 import 任何 `@deepseek-ai/*`，不装依赖、不打包；拷目录进去就能用 |
+| 🌐 **可选状态接口** | 注册 `GET /api/aoqi-pet` 读状态、`POST /api/aoqi-pet?action=next-pet\|poke` 做动作（应用内小宠物就是靠它） |
+| 📦 **零依赖零构建** | 宿主面不 import 任何 `@deepseek-ai/*`；客户端面是手写的 `window.__ModuleLoader__` bundle，不需要 npm 安装、不需要打包工具 |
 
 ## 架构：为什么桌宠必须是另一个进程
 
@@ -56,13 +58,17 @@ DSH 桌面端的宿主是 **Node 模式的宿主进程**，而 `Tray` / `Notific
 │  lib/auto-continue.js 纯逻辑：要不要续写 / 冷却 / 连击上限（可单测）                            │
 │  lib/bridge.js        写状态、读设置、读指令、写日志                                            │
 │  lib/pet-runtime.js   找 Python（含 DSH 自带运行时）→ 拉起/守护桌宠进程 → 发系统通知            │
+│  lib/client.js        客户端面（浏览器 bundle）：输入框旁的小宠物 + 工具结果卡片               │
 │  tools                 aoqi_pet_say / aoqi_pet_status / aoqi_pet_switch                        │
 └───────────────────────────────────────────┬──────────────────────────────────────────────────┘
-                                            │ 文件桥（<DSH_HOME>/aoqi-pet/）
-                        state.json ◀────────┴────────▶ companion-settings.json / command.json
-                                            │
-┌───────────────────────────────────────────┴──────────────────────────────────────────────────┐
-│  companion/aoqi_pet.py   独立 Python + tkinter 进程：置顶 + 透明 + 拖拽 + 右键菜单 + 动画循环   │
+        ▲ GET /api/aoqi-pet（DSH 界面内的小宠物轮询同一份状态）
+        │                                   │ 文件桥（<DSH_HOME>/aoqi-pet/）
+        │               state.json ◀────────┴────────▶ companion-settings.json / command.json
+        │                                   │
+┌───────┴───────────────────────────────────┴──────────────────────────────────────────────────┐
+│  companion/aoqi_pet.py   独立 Python + tkinter 进程：置顶 + 透明 + 拖拽 + 重力/甩动/撞边框 +   │
+│                          右键菜单 + 动画循环                                                  │
+│  companion/petphysics.py 物理体（纯数学、无 tkinter 依赖、可单测）                            │
 │  companion/toast.ps1     纯 ASCII 的 WinForms 气泡通知                                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -169,8 +175,10 @@ turn/end { reason: max-tokens }
 
 ## 使用
 
-* **右键桌宠**：换一只小五王 / **收起为图标（静态）** / 静音 / 暂停自动续写 / 窗口置顶 / 回到默认位置 / 立即恢复自动续写 / 退出桌宠。
-* **拖动**：按住左键拖走，位置自动记住（收起状态下的位置也会记住）。
+* **右键桌宠**：换一只小五王 / **收起为图标（静态）** / 素材用官方高清立绘 / **甩动·撞击边框（重力常开）** / **失重实验（默认关）** / 静音 / 暂停自动续写 / 窗口置顶 / 回到默认位置 / 立即恢复自动续写 / 退出桌宠。
+* **拖动 = 甩**：按住左键拖走，**松手时的速度会变成惯性** —— 甩得快就飞得远，撞到屏幕边框会弹（火花 + 抖动），然后被重力拉回下方停稳；位置自动记住（收起状态下的位置也会记住）。
+* **重力常开**：宠物常态就在屏幕下方；「失重实验」是可选项，打开才会往上飘。
+* **DSH 界面里也有它**：输入框旁边那只小宠物跟着同一份状态，显示待机/干活/完成/出错/等你 + 回合统计，**点一下就换下一只五王**（桌面那只同步换人，并冒泡提示）。
 * **点一下**：展开状态下相当于「我看见了」——清零连击、解除封顶；**收起状态下点一下 = 展开回宠物**。
 * **双击**：等同于点一下。
 * **收起时**：只显示一枚圆角图标，右上角状态点实时反映状态（灰=待机 / 青=工作 / 绿=完成 / 红=出错 / 橙=等待），
@@ -183,12 +191,14 @@ turn/end { reason: max-tokens }
 ```
 dsh-aoqi-pet/
 ├── lib/
-│   ├── index.js          插件入口：事件接线、状态机、通知、三个工具、可选 HTTP 路由
+│   ├── index.js          插件入口：事件接线、状态机、通知、三个工具、HTTP 路由（含应用内换宠）
+│   ├── client.js         客户端面（浏览器 bundle，非 ESM，零构建）：输入框旁的小宠物 + 工具卡片
 │   ├── auto-continue.js  自动续写决策（纯函数，可单测）
 │   ├── bridge.js         文件桥：state/settings/command/log 读写
 │   └── pet-runtime.js    找 Python、拉起并守护桌宠进程、系统气泡通知
 ├── companion/
-│   ├── aoqi_pet.py       桌宠窗口：置顶透明动画、拖拽、右键菜单、气泡、音量、收起为图标
+│   ├── aoqi_pet.py       桌宠窗口：置顶透明动画、拖拽甩动、重力/碰撞、右键菜单、气泡、收起为图标
+│   ├── petphysics.py     物理体：重力/失重/空气阻尼/四边反弹/睡眠（纯数学，可单测）
 │   └── toast.ps1         WinForms 气泡通知（纯 ASCII，中文走 base64）
 ├── assets/
 │   ├── pets/<id>/        base/f00..f15.png、5 个状态 GIF、portrait.png、hires/（官方高清素材 + source.png）
@@ -196,11 +206,14 @@ dsh-aoqi-pet/
 │   ├── pets/names.json   五王真名与官方出处（图鉴链接、立绘 URL）
 │   └── theme/            platform.png（生图站台，抠白底后用）、aoqi-icon.png（官方 logo，收起态）、*-raw.png（生图原图）
 ├── tools/                素材流水线：切片 / 合成动画 / 官方高清 / 抓取 / 文档演示图（可复现）
-├── test/smoke.mjs        自包含冒烟测试（44 项断言，不装依赖）
+├── test/smoke.mjs        自包含冒烟测试（53 项断言，不装依赖）
+├── test/client-ui.mjs    客户端面契约测试（34 项：假 __ModuleLoader__ + 假 React 真跑 bundle）
+├── test/pet-physics.py   物理单测（13 项：重力/反弹/衰减/不穿墙/dt 无关性）
+├── test/physics-live.py  物理真机验证（Win32 量真实窗口矩形：落下→落底、甩出→撞框→回底）
 ├── test/switch-guard.py  切换回归测试：隔离实例 + 钉死宿主状态，验证选择不被弹回
-├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）、参考规范（CONVENTIONS.md）
+├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）、物理（PHYSICS.md）、界面内宠物（IN-APP-UI.md）、参考规范（CONVENTIONS.md）
 ├── cordis.patch.yml      组合包 patch：把插件行插进 profile
-└── package.json          dsh.bundle.patch + dsh.catalog 元数据
+└── package.json          dsh.bundle.patch + dsh.client（客户端面）+ dsh.catalog 元数据
 ```
 
 ## 素材与版权
@@ -235,7 +248,9 @@ dsh-aoqi-pet/
 
 每个阶段都跑过真实验证，证据与命令见 [docs/VERIFICATION.md](docs/VERIFICATION.md)：
 
-* **冒烟测试 44/44**（`node test/smoke.mjs`）：工具注册、事件→状态机、续写决策、真名/俗称切换、桌宠设置联动。
+* **冒烟测试 53/53**（`node test/smoke.mjs`）：工具注册、事件→状态机、续写决策、真名/俗称切换、桌宠设置联动、`/api/aoqi-pet` 的 GET/POST 行为。
+* **客户端面契约 34/34**（`node test/client-ui.mjs`）：在假 `__ModuleLoader__` + 假 React + 假 `ctx.slots` 上真跑一遍 `lib/client.js`，逐条断言非 ESM、零顶层副作用、只 require 平台模块、id 等于包名、slot 注册形状、渲染与点击换宠物。
+* **物理单测 13/13**（`python test/pet-physics.py`）+ **物理真机 9/9**（`python test/physics-live.py`，连跑 3 次全绿）：自顶掉落→停在下方面（窗口底边 = 工作区底边）、合成甩动峰值约 9000px/s→撞 right/bottom/left→被重力拉回下方停稳。
 * **切换回归测试 6/6**（`python test/switch-guard.py`）：自己起一个隔离桌宠实例、把宿主状态钉死在会触发回弹的值上，断言用户的选择不会被宿主状态覆盖；并做了**负向对照**（把旧逻辑装回去，同一测试 5/6 失败）证明它真的能抓 bug。
 * 真实宿主热加载、桌宠进程自动拉起（1.5 秒重生）、窗口截图、相邻帧像素差、状态文件与 HTTP 路由读取。
 * 官方高清素材 25 个 GIF 的帧数/时长/透明三重自检，三种素材偏好的加载实测。

@@ -144,6 +144,7 @@ const registeredTools = new Map()
 const effects = []
 const agents = new Map()
 let webRoutes = 0
+let capturedRoute = null
 const ctx = {
   logger: { info: () => {} },
   on(type, handler) {
@@ -158,7 +159,7 @@ const ctx = {
   },
   tools: { register: (definition) => { registeredTools.set(definition.name, definition); return () => {} } },
   agents: { list: () => [...agents.values()], get: (id) => agents.get(id) ?? undefined },
-  get: (serviceName) => (serviceName === 'webServer' ? { register: () => { webRoutes += 1; return () => {} } } : undefined)
+  get: (serviceName) => (serviceName === 'webServer' ? { register: (route) => { webRoutes += 1; capturedRoute = route; return () => {} } } : undefined)
 }
 function emit(type, ...args) {
   for (const handler of listeners.get(type) ?? []) handler(...args)
@@ -251,6 +252,40 @@ check('桌宠切换宠物后宿主状态跟随', afterSettings.petId === 'an', a
 check('桌宠静音生效', afterSettings.muted === true, String(afterSettings.muted))
 check('桌宠暂停自动续写生效', afterSettings.autoContinue.enabled === false, JSON.stringify(afterSettings.autoContinue))
 check('心跳在持续刷新 updatedAt', afterSettings.updatedAt >= afterDone.updatedAt, `${afterDone.updatedAt} → ${afterSettings.updatedAt}`)
+
+// 7) HTTP 路由：给 DSH 界面内的客户端面喂数据 + 接受点击（换宠物）
+//    lib/client.js 里的输入框小宠物就是拉这个路由；这里的 POST 就是「点一下换一只」。
+function callRoute(method, url) {
+  const res = {
+    code: 0, headers: null, body: '',
+    writeHead(code, headers) { this.code = code; this.headers = headers },
+    end(body) { this.body = body },
+  }
+  capturedRoute.handler({ method, url }, res)
+  return { code: res.code, headers: res.headers, json: () => JSON.parse(res.body) }
+}
+check('注册了 /api/aoqi-pet 路由', webRoutes === 1 && capturedRoute !== null && capturedRoute.path === '/api/aoqi-pet')
+
+{
+  const got = callRoute('GET', '/api/aoqi-pet')
+  const payload = got.json()
+  check('GET 返回 200 与 no-store（客户端轮询用）', got.code === 200 && /no-store/.test(got.headers['cache-control'] || ''))
+  check('GET 带 state/pets/files 三段', payload.ok === true && typeof payload.state === 'object' && Object.keys(payload.pets).length === 5 && Boolean(payload.files.state))
+  check('GET 的 state 与最新心跳一致（petId=an）', payload.state.petId === 'an', payload.state.petId)
+
+  const next = callRoute('POST', '/api/aoqi-pet?action=next-pet')
+  const nextPayload = next.json()
+  check('POST next-pet 返回 200 且轮换到下一只（an → mu）', next.code === 200 && nextPayload.state.petId === 'mu', nextPayload.state?.petId)
+  const settingsAfterNext = JSON.parse(readFileSync(join(homeDir, 'aoqi-pet', 'companion-settings.json'), 'utf8'))
+  check('POST next-pet 会把选择写进 companion-settings.json（桌宠跟着换）', settingsAfterNext.pet === 'mu', settingsAfterNext.pet)
+  check('POST next-pet 会附带气泡反馈', typeof nextPayload.state.bubble?.text === 'string' && nextPayload.state.bubble.text.includes('阿瑞斯'), JSON.stringify(nextPayload.state.bubble))
+
+  const poke = callRoute('POST', '/api/aoqi-pet?action=poke')
+  check('POST poke 让桌宠冒泡「我在这儿！」', poke.code === 200 && poke.json().state.bubble.text === '我在这儿！')
+
+  const bad = callRoute('POST', '/api/aoqi-pet?action=不存在')
+  check('未知 action 返回 400（不打崩路由）', bad.code === 400 && bad.json().ok === false, String(bad.code))
+}
 
 // 清理
 for (const disposer of effects) {

@@ -8,7 +8,7 @@ DSH 自带运行时 `C:\Users\<你>\.dsh\dsh-runtimes\dsh-primary-runtime\depend
 
 ---
 
-## 1. 宿主插件纯逻辑与接线：43/43 通过
+## 1. 宿主插件纯逻辑与接线：53/53 通过
 
 ```bash
 node test/smoke.mjs
@@ -343,3 +343,56 @@ python test\switch-guard.py            # 6/6 通过
 * **两套独立方法互相印证**：五王命名与「初始形态」这套结论后来被另一条完全独立的路复核过
   （官方 CDN 直链文件名 = 精灵 id + 575×273 卡面角标读属性 + 7068 条精灵里对旧自造名 0 命中），
   结论与第 3 节的特征比对一致 —— 细节见 [NAMES.md](NAMES.md) 第 2.5 节。
+
+---
+
+## 18. 物理互动（重力 / 甩动 / 撞边框）：单测 13/13 + 真机 9/9（连跑 3 次）
+
+用户口径：**重力常开、宠物常态待在屏幕下方**；甩动只是给它碰撞能力。细节见 [PHYSICS.md](PHYSICS.md)。
+
+```bash
+python test/pet-physics.py      # 纯数学，不需要 GUI/DSH
+python test/physics-live.py     # 真机：隔离实例 + Win32 GetWindowRect 量真实窗口
+```
+
+```
+通过 13 项，失败 0 项
+[相位 A] 重力：从 (240,0) 起手 → 2.0~2.8 秒停稳，最终落点 y=750 = 1140-390（窗口高）
+         撞边框 bottom 1413 → 683 → 353 → 185 → 94px/s
+[相位 C] 合成鼠标甩动 → 运动幅度 881~1048px，峰值 8960~9084px/s
+         撞边框 right 3666 / bottom 1079 / left 1123 px/s → 又被重力拉回 y=750
+真机验证：全部通过 ✅（9 项）  × 连跑 3 次
+```
+
+跑第 4 次时曾出现 1 项失败（固定 9 秒采样窗遇到特别猛的甩动还没停稳 → 误判「没落底」）。
+**修的是测试而不是断言**：改成 `wait_settled()`（采样到真的安静下来，或 15 秒超时即判失败），
+重力那条也从「首个采样当起点」改成「从设置里的 y=0 算」，于是连跑 3 次全绿。
+
+两个过程中抓到的真 bug（都留了证据）：
+
+* **新物理体是睡着的** → 重力模式启动时窗口纹丝不动（相位 A 首次实测 `y: 0 → 0`）。
+  修法：`build_body()` 里 `mode != none` 就 `wake()`。
+* **`overrideredirect` 窗口在 mainloop 前 `winfo_x()` 返回 0** → 物理体把窗口从 240 硬拽到 0，
+  表现成「横向漂移」。证据：`物理体：… 起点=(0,0)` 与 `[debug] body=(0.0,0.0) 窗口=(240,0)` 同时出现。
+  修法：窗口位置自己记账（`self.win_pos`），不再信 `winfo_x()`。
+* **测量本身也要自检**：验证脚本第一版没声明 DPI 感知，`GetWindowRect` 返回 125% 下的另一套坐标
+  （1536×960），于是把「落到底」判成失败 —— 假失败。修法：`SetProcessDpiAwareness`，
+  并且**断言只用「窗口底边 = 工作区底边」这种与坐标系无关的量**（桌宠日志里的 y=600 与脚本里的 y=750
+  是同一个物理位置：600 × 1.25 = 750）。
+
+## 19. 进入 DSH 界面（客户端面）：契约 34/34 + 路由 9 项
+
+```bash
+node test/client-ui.mjs     # 假 __ModuleLoader__ + 假 React + 假 ctx.slots，把 bundle 真跑一遍
+node test/smoke.mjs         # 其中 9 项是 /api/aoqi-pet 的 GET/POST 行为
+```
+
+客户端 bundle 的硬约束逐条断言通过：`dsh.client.platform === "web"`、`exports["./client"]` 存在、
+非 ESM、无顶层副作用、只 require 平台模块表里的 `react`、不 require 任何 `@deepseek-ai/dsh-client-*`、
+注册 id 等于包名、list slot 给 `id`+`order`、keyed slot 给 `key`、样式作为资源注册且清理函数真的移除节点、
+组件能渲染出宠物名/状态/统计、`onClick` 走 `POST /api/aoqi-pet?action=next-pet`。
+
+**已知边界（写清楚）**：界面里的**最终视觉**需要 DSH 重启加载客户端 bundle（页面刷新不会重读磁盘 bundle），
+这一步我没法在不重启的前提下自证 —— 安装后请自己看一眼输入框旁边。
+另外第三方仓库场景下「改 `lib/client.js` 靠重装还是重启生效」**未确证**，稳妥做法是重启 DSH。
+详见 [IN-APP-UI.md](IN-APP-UI.md) 第 4 节。

@@ -17,6 +17,7 @@
 """
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -28,6 +29,10 @@ except ImportError:  # pragma: no cover - 没有 Tk 的发行版
     sys.stderr.write("aoqi-pet: 这个 Python 没有 tkinter，无法开窗\n")
     raise SystemExit(3)
 
+# 物理体：反重力 / 甩动 / 四边碰撞。纯数学、不依赖 tkinter，单测见 test/pet-physics.py。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from petphysics import Body as PhysicsBody, work_area  # noqa: E402
+
 # ── 视觉常量 ────────────────────────────────────────────────────────────────────
 # 透明色：窗口里所有等于这个颜色的像素都会被 Windows 抠掉，并让鼠标穿透。
 # 选品红是因为小五王素材里不可能出现它，不会误抠到宠物身上。
@@ -37,6 +42,10 @@ BUBBLE_BOX = 96           # 气泡预留高度（没有气泡时是透明区）
 ICON_BOX = 78             # 收起成图标时的窗口边长
 PAD = 8
 TICK_MS = 200             # 轮询状态文件的间隔
+PHYSICS_MS = 33           # 物理与窗口位移的节奏（~30fps，比状态轮询快得多）
+PHYSICS_MAX_DT = 0.25     # 单次物理步长上限（系统卡顿后别一次跳太远）
+PHYSICS_SAVE_S = 2.0      # 物理位移中每隔这么久把位置写回设置文件
+THROW_MIN_SPEED = 120.0   # px/s，甩动速度低于它就不算“甩”（避免手抖乱飞）
 STALE_GRACE_MS = 30000    # 启动后允许 state.json 缺席的宽限
 
 # 收起成图标时，右上角那个小圆点表示宿主这会儿在干什么（静止不动的状态灯）
@@ -76,7 +85,13 @@ def parse_args():
     parser.add_argument("--opacity", type=float, default=0.97)
     parser.add_argument("--topmost", type=int, default=1)
     parser.add_argument("--sound", type=int, default=1)
+    parser.add_argument("--physics", type=int, default=1,
+                        help="1=开启甩动/碰撞物理；0=关（窗口只跟着拖动走）")
+    parser.add_argument("--antigravity", type=int, default=0,
+                        help="1=反重力（往上飘、贴顶悬停）；0=正常重力（往下掉、落底）")
     parser.add_argument("--stale-exit-ms", type=int, default=120000)
+    parser.add_argument("--physics-debug", action="store_true",
+                        help="每个若干物理拍记一行位置/速度/窗口坐标，排查漂移用")
     parser.add_argument("--selftest", action="store_true", help="只做初始化自检后退出（CI 用）")
     parser.add_argument("--selftest-materials", action="store_true",
                         help="三种素材偏好各加载一遍并打日志（CI 用）")
@@ -117,6 +132,8 @@ class Settings:
         "collapsed": False,
         "autoContinuePaused": False,
         "material": "auto",
+        "physics": True,
+        "antigravity": False,
         "seq": 0,
     }
 
@@ -372,6 +389,21 @@ class PetWindow:
         self.dragging = False
         self.placeholder_items = []
         self.running = True
+        # ── 物理互动（反重力 / 甩动 / 撞边框）──
+        self.physics_enabled = bool(self.settings.data.get("physics", bool(args.physics)))
+        self.antigravity = bool(self.settings.data.get("antigravity", bool(args.antigravity)))
+        self.body = None
+        self.drag_samples = []          # [(t, x_root, y_root), ...] 用来算甩出速度
+        self.win_pos = None             # 窗口左上角。**自己记账**，不信 winfo_x()：
+                                        # overrideredirect 窗口在 mainloop 前 winfo_x() 会是 0，
+                                        # 用它建物理体会把窗口从正确位置硬拽到 0（实测踩过）
+        self.impact_items = []          # 撞击火花，画完就删
+        self.jolt = [0.0, 0.0]          # 撞击时的位置抖动偏移
+        self.last_geometry = (0, 0)     # 最近一次真正写进 geometry 的位置
+        self.last_physics_at = time.monotonic()
+        self.last_physics_save = 0.0
+        self.last_physics_log = 0.0
+        self.impact_count = 0
 
         self.root = tk.Tk()
         self.root.title("奥奇桌宠")
@@ -424,7 +456,9 @@ class PetWindow:
         self.write_pid()
         self.build_stage()
         self.switch_animation(self.animation, force=True)
+        self.build_body()
         self.root.after(120, self.tick)
+        self.root.after(220, self.physics_tick)
 
     # ── 窗口与菜单 ─────────────────────────────────────────────────────────────
     @staticmethod
@@ -490,8 +524,10 @@ class PetWindow:
         self.settings.set(collapsed=value, x=int(x), y=int(y))
         self.canvas.config(width=self.width, height=self.height)
         self.root.geometry("%dx%d+%d+%d" % (self.width, self.height, int(x), int(y)))
+        self.win_pos = (int(x), int(y))
         self.var_collapsed.set(value)
         self.build_stage()
+        self.sync_body_geometry()   # 尺寸变了：重新夹进工作区，别让半截窗口在屏幕外
         self.log("收起成图标（静态）" if value else "展开桌宠")
 
     def place_window(self):
@@ -502,6 +538,7 @@ class PetWindow:
             y = self.root.winfo_screenheight() - self.height - 96
             self.settings.set(x=int(x), y=int(y))
         self.root.geometry("%dx%d+%d+%d" % (self.width, self.height, int(x), int(y)))
+        self.win_pos = (int(x), int(y))
 
     def write_pid(self):
         try:
@@ -535,6 +572,16 @@ class PetWindow:
         menu.add_checkbutton(label="暂停自动续写", variable=self.var_paused, command=self.toggle_paused)
         menu.add_checkbutton(label="窗口置顶", variable=self.var_top, command=self.toggle_topmost)
         menu.add_separator()
+        # 物理互动：重力**始终存在**，宠物常态就是待在屏幕下方；
+        # 「甩动 / 撞边框」是给它加惯性，甩出去会飞、撞到边框会弹、然后落回下方。
+        # 失重实验是默认关闭的彩蛋（用户要的是碰撞能力，不是真的让它飘走）。
+        self.var_physics = tk.BooleanVar(value=bool(self.settings.data.get("physics", True)))
+        self.var_antigravity = tk.BooleanVar(value=bool(self.settings.data.get("antigravity", False)))
+        menu.add_checkbutton(label="甩动 / 撞击边框（重力常开）", variable=self.var_physics,
+                             command=self.toggle_physics)
+        menu.add_checkbutton(label="失重实验：飘到上面（默认关）", variable=self.var_antigravity,
+                             command=self.toggle_antigravity)
+        menu.add_separator()
         menu.add_command(label="让宠物回到默认位置", command=self.reset_position)
         menu.add_command(label="立即恢复自动续写", command=self.resume_auto_continue)
         menu.add_separator()
@@ -553,6 +600,7 @@ class PetWindow:
     def on_press(self, event):
         self.press = (event.x_root - self.root.winfo_x(), event.y_root - self.root.winfo_y())
         self.moved = False
+        self.drag_samples = [(time.monotonic(), event.x_root, event.y_root)]
 
     def on_drag(self, event):
         if self.press is None:
@@ -563,10 +611,18 @@ class PetWindow:
         if abs(x - self.root.winfo_x()) > 2 or abs(y - self.root.winfo_y()) > 2:
             self.moved = True
         self.root.geometry("+%d+%d" % (x, y))
+        self.last_geometry = (int(x), int(y))
+        self.win_pos = (int(x), int(y))
+        now = time.monotonic()
+        self.drag_samples.append((now, event.x_root, event.y_root))
+        if len(self.drag_samples) > 24:
+            del self.drag_samples[0]
+        self.drag_samples = [sample for sample in self.drag_samples if now - sample[0] <= 0.4]
 
     def on_release(self, _event):
         if self.dragging and self.moved:
             self.settings.set(x=self.root.winfo_x(), y=self.root.winfo_y())
+            self.throw_if_swung()
         elif not self.moved:
             # 图标模式点一下 = 展开；展开态点一下 = 告诉宿主「我看见了」（清零连击）
             if self.collapsed:
@@ -575,6 +631,23 @@ class PetWindow:
                 self.send_command("poke")
         self.dragging = False
         self.press = None
+
+    def throw_if_swung(self):
+        """松手瞬间：把拖动速度交给物理体（这就是「甩」）。
+
+        速度不够就当普通放下：半空中松手就自然掉下去／飘上去。
+        """
+        if self.body is None:
+            return
+        self.sync_body_geometry()
+        vx, vy = self.throw_velocity()
+        speed = math.hypot(vx, vy)
+        if self.physics_enabled and speed >= THROW_MIN_SPEED:
+            self.body.throw(vx, vy)
+            self.log("甩出：vx=%.0f vy=%.0f（合速度 %.0f px/s）" % (vx, vy, speed))
+        elif self.mode_for_physics() != "none":
+            self.body.wake()
+        self.drag_samples = []
 
     def on_context(self, event):
         try:
@@ -639,6 +712,186 @@ class PetWindow:
         y = self.root.winfo_screenheight() - self.height - 96
         self.settings.set(x=int(x), y=int(y))
         self.root.geometry("+%d+%d" % (int(x), int(y)))
+        self.last_geometry = (int(x), int(y))
+        self.win_pos = (int(x), int(y))
+        if self.body is not None:
+            self.body.place(x, y)
+            self.body.wake()
+
+    # ── 物理互动：反重力 / 甩动 / 撞边框 ───────────────────────────────────────
+    def mode_for_physics(self):
+        if not self.physics_enabled:
+            return "none"
+        return "antigravity" if self.antigravity else "gravity"
+
+    def build_body(self):
+        """按当前窗口位置与屏幕工作区建物理体（工作区已排除任务栏）。"""
+        bounds = work_area(self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        self.body = PhysicsBody(self.width, self.height, bounds, mode=self.mode_for_physics())
+        x, y = self.win_pos if self.win_pos else (self.root.winfo_x(), self.root.winfo_y())
+        self.body.place(x, y)
+        # 刚建好的物理体是「睡着」的：必须唤醒，否则重力模式下它永远不落、
+        # 反重力也不飘（实测踩过：相位 A 4.5 秒里窗口纹丝不动）。
+        if self.body.mode != "none":
+            self.body.wake()
+        self.last_geometry = (int(x), int(y))
+        self.log("物理体：模式=%s 工作区=%s 窗口=%dx%d 起点=(%d,%d)"
+                 % (self.body.mode, tuple(int(v) for v in bounds), self.width, self.height, x, y))
+
+    def sync_body_geometry(self):
+        """窗口被拖动/收起/换位置之后，把窗口真实位置同步给物理体。"""
+        if self.body is None:
+            return
+        if (self.body.width, self.body.height) != (float(self.width), float(self.height)):
+            self.body.resize(self.width, self.height)
+        x, y = self.win_pos if self.win_pos else (self.root.winfo_x(), self.root.winfo_y())
+        self.body.place(x, y, keep_velocity=True)
+        self.last_geometry = (int(x), int(y))
+
+    def set_physics(self, enabled):
+        self.physics_enabled = bool(enabled)
+        self.settings.set(physics=self.physics_enabled)
+        if self.body is not None:
+            self.body.set_mode(self.mode_for_physics())
+            self.sync_body_geometry()
+        self.show_bubble("物理互动：开（甩一下，撞边框会弹）" if self.physics_enabled
+                         else "物理互动：关（只跟着你拖）", "say", 2600)
+
+    def set_antigravity(self, enabled):
+        self.antigravity = bool(enabled)
+        self.settings.set(antigravity=self.antigravity)
+        if self.body is not None:
+            self.body.set_mode(self.mode_for_physics())
+        self.show_bubble("失重实验：飘到上面（关掉就恢复重力、落回下方）" if self.antigravity
+                         else "恢复重力：落回下方", "say", 3000)
+
+    def toggle_physics(self):
+        self.set_physics(bool(self.var_physics.get()))
+
+    def toggle_antigravity(self):
+        self.set_antigravity(bool(self.var_antigravity.get()))
+
+    def throw_velocity(self):
+        """从最近 120ms 的拖动采样算甩出速度（px/s）。采样点为 0 的话当作没甩。"""
+        if len(self.drag_samples) < 2:
+            return (0.0, 0.0)
+        t_new, x_new, y_new = self.drag_samples[-1]
+        pick = self.drag_samples[0]
+        for sample in self.drag_samples:
+            if t_new - sample[0] <= 0.12:
+                pick = sample
+                break
+        dt = t_new - pick[0]
+        if dt <= 0.001:
+            return (0.0, 0.0)
+        return ((x_new - pick[1]) / dt, (y_new - pick[2]) / dt)
+
+    def physics_tick(self):
+        """独立于状态轮询的快速循环（~30fps）。异常绝不能让循环停掉。"""
+        if not self.running:
+            return
+        try:
+            self.physics_once()
+        except Exception as error:            # noqa: BLE001 —— 物理炸了也不能让窗口卡死
+            self.log("物理 tick 异常（已忽略）：%s: %s" % (type(error).__name__, error))
+        if self.running:
+            self.root.after(PHYSICS_MS, self.physics_tick)
+
+    def physics_once(self):
+        now = time.monotonic()
+        dt = min(PHYSICS_MAX_DT, max(0.0, now - self.last_physics_at))
+        self.last_physics_at = now
+        if self.body is None:
+            return
+        if self.dragging:
+            self.sync_body_geometry()     # 手拖时物理让位，松手才把速度交给它
+            return
+        if getattr(self.args, "physics_debug", False):
+            self.physics_debug_n = getattr(self, "physics_debug_n", 0) + 1
+            if self.physics_debug_n % 10 == 1:
+                self.log("[debug] 拍%d dt=%.3f body=(%.1f,%.1f) v=(%.1f,%.1f) 窗口=(%d,%d) 记账=%s 醒=%s 拖=%s"
+                         % (self.physics_debug_n, dt, self.body.x, self.body.y, self.body.vx, self.body.vy,
+                            self.root.winfo_x(), self.root.winfo_y(), self.win_pos, self.body.awake, self.dragging))
+        was_awake = self.body.awake
+        events = self.body.step(dt)
+        target = self.body.rect()
+        if target != self.last_geometry:
+            self.root.geometry("+%d+%d" % target)
+            self.last_geometry = target
+            self.win_pos = target
+        if events:
+            for edge, speed in events:
+                self.on_impact(edge, speed)
+        # 每秒一条物理心跳：出问题时能直接从日志看出位置/速度/是否睡着
+        if self.body.awake and now - self.last_physics_log > 1.0:
+            self.last_physics_log = now
+            self.log("物理心跳：模式=%s 位置=(%.0f,%.0f) 速度=(%.0f,%.0f) 撞墙累计=%d"
+                     % (self.body.mode, self.body.x, self.body.y, self.body.vx, self.body.vy,
+                        self.body.bounces))
+        if was_awake and not self.body.awake:
+            self.log("物理：停稳在 (%.0f,%.0f)，不再每帧移动窗口" % (self.body.x, self.body.y))
+        if (was_awake and not self.body.awake) or (self.body.awake and now - self.last_physics_save > PHYSICS_SAVE_S):
+            self.last_physics_save = now
+            self.settings.set(x=target[0], y=target[1])
+
+    def on_impact(self, edge, speed):
+        """撞到屏幕边框：记日志 + 火花 + 抖动。
+
+        诚实说明：Tk 的图片只能整数缩放，没法真做「压扁/拉伸」的形变，
+        所以反馈是位移抖动 + 火花，而不是形变。
+        """
+        self.impact_count += 1
+        self.log("撞边框：%s 速度=%.0fpx/s（累计 %d 次）" % (edge, speed, self.impact_count))
+        if self.collapsed:
+            return
+        strength = max(0.25, min(1.0, speed / 1500.0))
+        push = 7.0 * strength
+        self.jolt = {
+            "left": [push, 0.0],
+            "right": [-push, 0.0],
+            "top": [0.0, push],
+            "bottom": [0.0, -push],
+        }.get(edge, [0.0, 0.0])
+        self.spawn_sparks(edge, strength)
+        self.redraw_sprite()
+        self.root.after(120, self.clear_jolt)
+        self.root.after(220, self.clear_sparks)
+
+    def clear_jolt(self):
+        self.jolt = [0.0, 0.0]
+        try:
+            self.redraw_sprite()
+        except tk.TclError:
+            pass
+
+    def spawn_sparks(self, edge, strength):
+        """在撞击的那条边画一小簇火花（200ms 后删掉）。"""
+        info = PETS.get(self.pet, PETS["shui"])
+        count = 4 + int(strength * 6)
+        if edge in ("left", "right"):
+            cx = 7.0 if edge == "left" else self.width - 7.0
+            cy = min(max(self.ground_y - 70, 20), self.height - 20)
+            for i in range(count):
+                py = cy + (i - count / 2.0) * 10
+                px = cx + (10 + 16 * strength) * (1 if edge == "left" else -1) * (0.4 + 0.6 * (i % 3) / 2.0)
+                self.impact_items.append(self.canvas.create_oval(
+                    px - 3, py - 3, px + 3, py + 3, fill=info["color"] if i % 2 == 0 else "#ffffff", outline=""))
+        else:
+            cy = 7.0 if edge == "top" else self.height - 7.0
+            cx = self.width / 2
+            for i in range(count):
+                px = cx + (i - count / 2.0) * 10
+                py = cy + (10 + 16 * strength) * (1 if edge == "top" else -1) * (0.4 + 0.6 * (i % 3) / 2.0)
+                self.impact_items.append(self.canvas.create_oval(
+                    px - 3, py - 3, px + 3, py + 3, fill=info["color"] if i % 2 == 0 else "#ffffff", outline=""))
+
+    def clear_sparks(self):
+        for item in self.impact_items:
+            try:
+                self.canvas.delete(item)
+            except tk.TclError:
+                pass
+        self.impact_items = []
 
     def send_command(self, action, **payload):
         command = {"seq": self.settings.next_seq(), "action": action, "at": int(time.time() * 1000)}
@@ -697,7 +950,7 @@ class PetWindow:
                     self.scaled_cache[cache_key] = photo.subsample(factor, factor)
                 photo = self.scaled_cache[cache_key]
             self.sprite_item = self.canvas.create_image(
-                self.width / 2, self.ground_y, image=photo, anchor="s",
+                self.width / 2 + self.jolt[0], self.ground_y + self.jolt[1], image=photo, anchor="s",
             )
             return
         self.draw_placeholder()
@@ -810,8 +1063,20 @@ class PetWindow:
             self.root.attributes("-alpha", max(0.2, min(1.0, opacity)))
         except tk.TclError:
             pass
-        self.log("设置热重载：pet=%s collapsed=%s topmost=%s muted=%s material=%s"
-                 % (self.pet, self.collapsed, topmost, muted, self.library.material))
+        # 物理互动也可以从外面改（宿主工具 / 测试脚本写 settings 文件）
+        physics = bool(self.settings.data.get("physics", True))
+        if physics != self.physics_enabled:
+            self.set_physics(physics)
+            if hasattr(self, "var_physics"):
+                self.var_physics.set(physics)
+        antigravity = bool(self.settings.data.get("antigravity", False))
+        if antigravity != self.antigravity:
+            self.set_antigravity(antigravity)
+            if hasattr(self, "var_antigravity"):
+                self.var_antigravity.set(antigravity)
+        self.log("设置热重载：pet=%s collapsed=%s topmost=%s muted=%s material=%s 物理=%s/%s"
+                 % (self.pet, self.collapsed, topmost, muted, self.library.material,
+                    self.physics_enabled, "反重力" if self.antigravity else "重力"))
 
     def tick(self):
         """一拍一拍的轮询。**单拍异常绝不能让循环停掉**——Tk 的 after 回调里抛异常
