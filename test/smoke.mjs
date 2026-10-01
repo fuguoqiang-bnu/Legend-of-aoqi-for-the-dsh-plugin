@@ -186,7 +186,7 @@ plugin.apply(ctx, {
   autoContinue: { enabled: true, graceMs: 20, cooldownMs: 0, maxConsecutive: 2 }
 })
 
-check('注册了三个宠物工具', registeredTools.size === 3 && registeredTools.has('aoqi_pet_say') && registeredTools.has('aoqi_pet_status') && registeredTools.has('aoqi_pet_switch'), [...registeredTools.keys()].join(','))
+check('注册了四个宠物工具', registeredTools.size === 4 && registeredTools.has('aoqi_pet_say') && registeredTools.has('aoqi_pet_status') && registeredTools.has('aoqi_pet_switch') && registeredTools.has('aoqi_pet_skin'), [...registeredTools.keys()].join(','))
 check('监听 session/event 与 agent/status', listeners.has('session/event') && listeners.has('agent/status'))
 check('注册了心跳 effect', effects.length >= 2, String(effects.length))
 check('注册了可选 HTTP 路由', webRoutes === 1, String(webRoutes))
@@ -259,10 +259,15 @@ function callRoute(method, url) {
   const res = {
     code: 0, headers: null, body: '',
     writeHead(code, headers) { this.code = code; this.headers = headers },
-    end(body) { this.body = body },
+    end(body) { this.body = body === undefined ? '' : body },
   }
   capturedRoute.handler({ method, url }, res)
-  return { code: res.code, headers: res.headers, json: () => JSON.parse(res.body) }
+  return {
+    code: res.code,
+    headers: res.headers,
+    raw: res.body,
+    json: () => JSON.parse(String(res.body)),
+  }
 }
 check('注册了 /api/aoqi-pet 路由', webRoutes === 1 && capturedRoute !== null && capturedRoute.path === '/api/aoqi-pet')
 
@@ -285,6 +290,62 @@ check('注册了 /api/aoqi-pet 路由', webRoutes === 1 && capturedRoute !== nul
 
   const bad = callRoute('POST', '/api/aoqi-pet?action=不存在')
   check('未知 action 返回 400（不打崩路由）', bad.code === 400 && bad.json().ok === false, String(bad.code))
+}
+
+// 8) 换肤：目录、素材二进制、落盘、工具
+section('C. 换肤（宿主侧）')
+{
+  const rootPayload = callRoute('GET', '/api/aoqi-pet').json()
+  const catalog = rootPayload.skin?.catalog
+  check('GET 的 payload 里带皮肤目录', Array.isArray(catalog) && catalog.length > 0, `catalog=${catalog?.length}`)
+  const ids = (catalog ?? []).map((skin) => skin.id)
+  check('目录含随仓库分发的场景图与五王立绘',
+    ['aurora', 'stage', 'huo', 'jin', 'shui', 'an', 'mu'].every((id) => ids.includes(id)), ids.join(','))
+  check('每个皮肤条目都带着客户端面需要的字段',
+    (catalog ?? []).every((skin) => typeof skin.id === 'string' && typeof skin.name === 'string' &&
+      typeof skin.accent === 'string' && skin.image === `/api/aoqi-pet/skin/${skin.id}` &&
+      typeof skin.imageSize === 'string' && typeof skin.imagePosition === 'string' &&
+      skin.tokens && skin.tokens['--dsw-alias-bg-base']?.light && skin.tokens['--dsw-alias-bg-base']?.dark),
+    JSON.stringify(catalog?.[0] ?? null).slice(0, 200))
+  check('默认皮肤是配置里的 aurora', rootPayload.skin.id === 'aurora', rootPayload.skin.id)
+  check('payload 里带内置网页配置', rootPayload.find?.url === 'https://dshfind.com/zh', JSON.stringify(rootPayload.find))
+
+  const asset = callRoute('GET', '/api/aoqi-pet/skin/aurora')
+  const onDisk = readFileSync(join(ROOT, 'assets', 'theme', 'aurora-sky-raw.png'))
+  check('皮肤底图按二进制返回 200', asset.code === 200 && Buffer.isBuffer(asset.raw), `code=${asset.code} type=${typeof asset.raw}`)
+  check('底图的 Content-Type 正确', asset.headers?.['content-type'] === 'image/png', String(asset.headers?.['content-type']))
+  check('底图字节数与磁盘上的素材一致', asset.raw?.length === onDisk.length, `${asset.raw?.length} vs ${onDisk.length}`)
+  check('底图带可缓存头（同一张图不会每次换肤都重下）', /max-age=3600/.test(String(asset.headers?.['cache-control'])))
+
+  const missing = callRoute('GET', '/api/aoqi-pet/skin/nope')
+  check('未知皮肤返回 404 而不是 500', missing.code === 404 && missing.json().ok === false, String(missing.code))
+  const traversal = callRoute('GET', '/api/aoqi-pet/skin/..%2f..%2fpackage.json')
+  check('路径穿越被挡在 404（素材路径只能由目录给出）', traversal.code === 404, String(traversal.code))
+  const skinsRoute = callRoute('GET', '/api/aoqi-pet/skins')
+  check('GET /skins 单独给出目录', skinsRoute.code === 200 && Array.isArray(skinsRoute.json().skin.catalog))
+  const unknownRoute = callRoute('GET', '/api/aoqi-pet/whatever')
+  check('未知子路由 404', unknownRoute.code === 404, String(unknownRoute.code))
+
+  const applied = callRoute('POST', '/api/aoqi-pet?action=set-skin&id=huo&scrim=0.6')
+  check('POST set-skin 返回 200 且切到 huo', applied.code === 200 && applied.json().skin.id === 'huo', applied.json().skin?.id)
+  check('POST set-skin 写入 scrim', Math.abs(applied.json().skin.scrim - 0.6) < 1e-9, String(applied.json().skin?.scrim))
+  const skinFile = JSON.parse(readFileSync(join(homeDir, 'aoqi-pet', 'skins.json'), 'utf8'))
+  check('皮肤选择落盘到 ~/.dsh/aoqi-pet/skins.json', skinFile.id === 'huo' && skinFile.scrim === 0.6, JSON.stringify(skinFile))
+  check('换肤会给桌宠冒个气泡', String(applied.json().state?.bubble?.text ?? '').includes('龙炎'), JSON.stringify(applied.json().state?.bubble))
+
+  const badSkin = callRoute('POST', '/api/aoqi-pet?action=set-skin&id=不存在')
+  check('换一张不存在的皮肤被拒（404），不会把界面换坏', badSkin.code === 404 && badSkin.json().ok === false, String(badSkin.code))
+
+  const tool = registeredTools.get('aoqi_pet_skin')
+  const listed = await tool.execute({ action: 'list' })
+  check('aoqi_pet_skin list 列出皮肤与当前皮肤', listed.includes('aurora') && listed.includes('当前皮肤'), listed.split('\n')[0])
+  const off = await tool.execute({ action: 'off' })
+  check('aoqi_pet_skin off 恢复默认外观', off.includes('默认') && callRoute('GET', '/api/aoqi-pet').json().skin.id === 'default', String(off))
+  const on = await tool.execute({ action: 'apply', skin: 'an', scrim: 0.2 })
+  check('aoqi_pet_skin apply 换肤并落盘',
+    on.includes('修尔') && JSON.parse(readFileSync(join(homeDir, 'aoqi-pet', 'skins.json'), 'utf8')).id === 'an', String(on))
+  const badTool = await tool.execute({ action: 'apply', skin: '不存在' })
+  check('aoqi_pet_skin 认不出的皮肤给明确错误', badTool.includes('失败'), String(badTool))
 }
 
 // 清理

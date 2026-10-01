@@ -2,40 +2,65 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>奥奇桌宠 · 界面内小宠物（本地渲染 harness）</title>
+<title>奥奇桌宠 · 界面内小宠物与换肤（本地渲染 harness）</title>
 <!--
-  这是什么：本地渲染 harness，用来**看** lib/client.js 里那只小宠物长什么样。
+  这是什么：本地渲染 harness，用来**看** lib/client.js 里的东西长什么样。
 
-  为什么要它：真·界面内小宠物必须由 DSH 启动时组装客户端 bundle 才会出现，
+  为什么要它：真·界面内小宠物与侧栏面板必须由 DSH 启动时组装客户端 bundle 才会出现，
   而「启动时」意味着要重启 DSH；这一步做不到时，用这个页面在**真 Chromium**里
   跑**同一份 lib/client.js**（通过下面那个假的 window.__ModuleLoader__），
-  就能验证布局/配色/SVG/主题 token 是不是对的。
+  就能验证布局/配色/SVG/主题 token/换肤是不是对的。
 
   React 用的是等价 shim（createElement / useState / useEffect / useRef + 极简 DOM 渲染），
   因为宿主不重启就没法把 bundle 交给真的模块加载器。所以：
-  ✅ 能证明：组件代码本身渲染正常、只用主题 token、明暗两套主题都好看
+  ✅ 能证明：组件代码本身渲染正常、只用主题 token、换肤真的把底图与半透明配色铺上去
   ❌ 不能证明：DSH 里插槽位置/宿主真实 props —— 那需要重启 DSH 后肉眼看
+
+  查询参数：
+    ?skin=<id>   让宿主快照里的当前皮肤 = 这张皮（默认 default，不换肤）
+    ?panel=find  主区域只渲染内置网页面板（默认渲染皮肤中心）
+    ?once=1      把轮询降级成「只拉一次」（无头截图必须）
+    ?only=app    隐藏上面的停靠位演示，只留应用外壳（换肤截图用）
 -->
 <style>
   :root {
+    /* lib/client.js 的组件只用 --dsw-alias-* / --dsw-specific-* token，这里按真机名字铺一份 */
+    --dsw-alias-bg-base: #ffffff;
+    --dsw-alias-bg-layer-1: #f7f8fb;
+    --dsw-alias-bg-layer-2: #eef1f7;
+    --dsw-alias-bg-overlay: #ffffff;
+    --dsw-alias-border-l1: rgba(20, 30, 60, .14);
+    --dsw-alias-border-l2: rgba(20, 30, 60, .24);
+    --dsw-alias-border-secondary: rgba(20, 30, 50, .18);
+    --dsw-alias-label-primary: #101a2e;
+    --dsw-alias-label-secondary: rgba(16, 26, 46, .74);
+    --dsw-alias-brand-primary: #4176e6;
+    --dsw-specific-sidebar-fill: #f2f4f8;
     --dsw-alias-bg-primary: #ffffff;
     --dsw-alias-bg-secondary: #f2f4f8;
     --dsw-alias-bg-tertiary: #e6eaf2;
-    --dsw-alias-border-secondary: rgba(20, 30, 50, .18);
     --dsw-alias-text-primary: #161c26;
     --dsw-alias-text-secondary: #5b6474;
     --dsw-alias-text-tertiary: #8b93a3;
   }
   .dark {
+    --dsw-alias-bg-base: #16181d;
+    --dsw-alias-bg-layer-1: #1d2026;
+    --dsw-alias-bg-layer-2: #23262d;
+    --dsw-alias-border-l1: rgba(220, 230, 245, .16);
+    --dsw-alias-border-l2: rgba(220, 230, 245, .26);
+    --dsw-alias-border-secondary: rgba(220, 230, 245, .18);
+    --dsw-alias-label-primary: #e9edf4;
+    --dsw-alias-label-secondary: rgba(233, 237, 244, .78);
+    --dsw-specific-sidebar-fill: #16181d;
     --dsw-alias-bg-primary: #16181d;
     --dsw-alias-bg-secondary: #23262d;
     --dsw-alias-bg-tertiary: #2d3138;
-    --dsw-alias-border-secondary: rgba(220, 230, 245, .18);
     --dsw-alias-text-primary: #e9edf4;
     --dsw-alias-text-secondary: #a7b0bf;
     --dsw-alias-text-tertiary: #7d8695;
   }
-  body { margin: 0; font: 14px/1.5 "Microsoft YaHei", system-ui, sans-serif; }
+  body { margin: 0; font: 14px/1.5 "Microsoft YaHei", system-ui, sans-serif; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-text-primary); }
   .band { padding: 18px 22px; }
   .label { font-size: 12px; letter-spacing: .02em; opacity: .75; margin-bottom: 8px; }
   .composer {
@@ -54,6 +79,27 @@
   }
   .note { font-size: 12px; color: #b23b2e; background: #ffeceb; border: 1px solid #ffc9c3;
           padding: 8px 12px; border-radius: 8px; margin: 14px 22px 0; }
+  .note--dark { color: #ffd9a8; background: #4a3413; border-color: #7a5a20; }
+
+  /* ── 模拟的 DSH 外壳：只为把换肤效果摆出来，不是真机界面 ───────────────── */
+  .app { display: flex; height: 560px; margin: 0 22px 24px; border-radius: 14px; overflow: hidden;
+         border: 1px solid var(--dsw-alias-border-secondary); }
+  .app__side { width: 232px; flex: 0 0 auto; padding: 10px 8px;
+               background: var(--dsw-specific-sidebar-fill);
+               border-right: 1px solid var(--dsw-alias-border-l1);
+               display: flex; flex-direction: column; gap: 4px; }
+  .app__brand { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 6px 8px 12px; }
+  .app__row { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 9px;
+              font-size: 13px; color: var(--dsw-alias-label-primary); }
+  .app__row--idle { opacity: .72; }
+  .app__row--active { background: var(--dsw-alias-bg-layer-2); font-weight: 600; }
+  .app__row svg { flex: 0 0 auto; }
+  .app__spacer { flex: 1 1 auto; }
+  .app__main { flex: 1 1 auto; min-width: 0; background: var(--dsw-alias-bg-base); display: flex; flex-direction: column; }
+  .app__stack { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .app__block { border-bottom: 1px solid var(--dsw-alias-border-l1); }
+  .app__block:last-child { border-bottom: 0; }
+  .app__blockHead { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; opacity: .6; padding: 10px 22px 0; }
 </style>
 </head>
 <body>
@@ -83,6 +129,18 @@
 <div class="band" id="band-tool">
   <div class="label">工具结果卡片（tool.call.toolview，key = aoqi_pet_status）</div>
   <div id="tool"></div>
+</div>
+
+<div class="note note--dark" id="app-note" style="display:none">
+  下面是<b>模拟的 DSH 外壳</b>（左侧栏 + 主区域），只为把换肤与两个新入口的效果摆出来；
+  侧栏图标用的是 <code>lib/client.js</code> 里<b>真的</b>那个图标组件，主区域是<b>真的</b>那两个面板组件。
+</div>
+
+<div class="app" id="app" style="display:none">
+  <aside class="app__side" id="app-side"></aside>
+  <main class="app__main">
+    <div class="app__stack" id="app-stack"></div>
+  </main>
 </div>
 
 <script>
@@ -155,7 +213,12 @@
       : document.createElement(node.type);
     Object.entries(node.props || {}).forEach(([key, value]) => {
       if (key === 'children' || value === null || value === undefined) return;
-      if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
+      if (key === 'style' && typeof value === 'object') {
+        Object.entries(value).forEach(([prop, val]) => {
+          if (prop.startsWith('--')) el.style.setProperty(prop, String(val));
+          else el.style[prop] = val;
+        });
+      }
       else if (key === 'className') el.setAttribute('class', value);
       else if (/^on[A-Z]/.test(key) && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
       else if (value === true) el.setAttribute(key, '');
@@ -168,12 +231,71 @@
   window.__REACT_SHIM__ = { React, toDom, setRootRender: (fn) => { rootRender = fn; }, takeEffects: () => { const out = pendingEffects; pendingEffects = []; return out; } };
 })();
 
-// ── 假宿主②：__ModuleLoader__ + slots + fetch（喂一份和真机一样的 state 快照）─────
+// ── 假宿主②：__ModuleLoader__ + slots + fetch（喂一份和真机一样的快照）──────────
 (function () {
   const shim = window.__REACT_SHIM__;
+  const params = new URLSearchParams(location.search);
   const registered = [];
+
+  // 皮肤目录：结构照抄宿主 buildSkinCatalog() 的输出，只有 image 换成仓库里的相对路径
+  // （真机是 /api/aoqi-pet/skin/<id>，harness 直接指向文件，才能离屏渲染出真素材）。
+  const CATALOG = [
+    { id: 'aurora', name: '极光苍穹', subtitle: '官方极光天幕 · 满铺场景', kind: 'scene', accent: '#5ec8ff',
+      image: '../assets/theme/aurora-sky-raw.png', imageSize: 'cover', imagePosition: 'center',
+      base: { light: 'none', dark: 'none' }, fallbackColor: { light: '#eef3fb', dark: '#070b18' },
+      scrimRgb: { light: '255,255,255', dark: '3,6,18' }, scrim: 0.45 },
+    { id: 'stage', name: '决战之台', subtitle: '官方舞台台面 · 满铺场景', kind: 'scene', accent: '#ffb03a',
+      image: '../assets/theme/stage-platform-raw.png', imageSize: 'cover', imagePosition: 'center',
+      base: { light: 'none', dark: 'none' }, fallbackColor: { light: '#eef3fb', dark: '#070b18' },
+      scrimRgb: { light: '255,255,255', dark: '3,6,18' }, scrim: 0.45 },
+    { id: 'huo', name: '烈焰 · 龙炎', subtitle: '传说王者立绘 · 火', kind: 'king', accent: '#ff7a4d',
+      image: '../assets/pets/huo/portrait.png', imageSize: 'auto 86%', imagePosition: 'right bottom',
+      base: { light: 'radial-gradient(120% 80% at 78% 88%,#ffe2cf 0%,#fff6f0 58%,#ffffff 100%)',
+              dark: 'radial-gradient(120% 80% at 78% 88%,#3a1206 0%,#150608 58%,#04060f 100%)' },
+      fallbackColor: { light: '#fff6f0', dark: '#150608' },
+      scrimRgb: { light: '255,255,255', dark: '3,6,18' }, scrim: 0.45 },
+    { id: 'shui', name: '光辉 · 帝释天', subtitle: '传说王者立绘 · 光', kind: 'king', accent: '#5fb8ff',
+      image: '../assets/pets/shui/portrait.png', imageSize: 'auto 86%', imagePosition: 'right bottom',
+      base: { light: 'radial-gradient(120% 80% at 78% 88%,#d7ecff 0%,#f3f9ff 58%,#ffffff 100%)',
+              dark: 'radial-gradient(120% 80% at 78% 88%,#062036 0%,#030d1b 58%,#04060f 100%)' },
+      fallbackColor: { light: '#f3f9ff', dark: '#030d1b' },
+      scrimRgb: { light: '255,255,255', dark: '3,6,18' }, scrim: 0.45 },
+  ].map((skin) => Object.assign({}, skin, {
+    tokens: {
+      '--dsw-alias-bg-base': { light: 'rgba(255,255,255,.52)', dark: 'rgba(7,11,26,.55)' },
+      '--dsw-alias-bg-layer-1': { light: 'rgba(255,255,255,.66)', dark: 'rgba(13,19,42,.64)' },
+      '--dsw-alias-bg-layer-2': { light: 'rgba(255,255,255,.78)', dark: 'rgba(18,26,54,.72)' },
+      '--dsw-alias-bg-overlay': { light: 'rgba(255,255,255,.94)', dark: 'rgba(9,13,30,.92)' },
+      '--dsw-alias-border-l1': { light: 'rgba(20,30,60,.14)', dark: 'rgba(255,255,255,.16)' },
+      '--dsw-alias-border-l2': { light: 'rgba(20,30,60,.24)', dark: 'rgba(255,255,255,.26)' },
+      '--dsw-specific-sidebar-fill': { light: 'rgba(255,255,255,.50)', dark: 'rgba(7,12,30,.52)' },
+      '--dsw-alias-label-primary': { light: '#101a2e', dark: '#eef3ff' },
+      '--dsw-alias-label-secondary': { light: 'rgba(16,26,46,.74)', dark: 'rgba(238,243,255,.78)' },
+      '--dsw-alias-brand-primary': { light: skin.accent, dark: skin.accent },
+    },
+  }));
+
+  const activeSkin = params.get('skin') || 'default';
+
+  // 假主题服务：把覆盖层真的写到 body 上（真机里这一步由 ui-layout 做），
+  // 这样截图看到的就是真机上会发生的效果，而不是「假设它生效」。
+  const theme = {
+    getTheme: () => ({ active: { colorScheme: 'light' }, preference: 'light' }),
+    overrideTokens(source, tokens) {
+      const scheme = 'light';
+      const applied = [];
+      for (const [name, pair] of Object.entries(tokens)) {
+        document.body.style.setProperty(name, pair[scheme]);
+        applied.push(name);
+      }
+      return () => { for (const name of applied) document.body.style.removeProperty(name); };
+    },
+  };
+
   const ctx = {
     effect(fn) { const dispose = fn(); return dispose; },
+    on(type, handler) { return () => {}; },
+    get(name) { return name === 'theme' ? theme : undefined; },
     slots: {
       inject(key, callback) { return callback(); },
       register(options, component) { registered.push({ options, component }); return () => {}; },
@@ -196,16 +318,17 @@
     json: () => Promise.resolve({
       ok: true,
       state: {
-        petId: 'huo', petName: '龙炎', animation: url.indexOf('next-pet') >= 0 ? 'working' : 'working',
+        petId: 'huo', petName: '龙炎', animation: 'working',
         headline: '正在使用 edit…', bubble: null, muted: false, paused: false,
         stats: { turns: 12, completions: 5, truncations: 2, autoContinues: 3 },
       },
       pets: { huo: { name: '龙炎' } },
+      skin: { enabled: true, id: activeSkin, scrim: 0.45, catalog: CATALOG },
+      find: { enabled: true, title: 'DSH Find', url: params.get('find') || 'https://dshfind.com/zh' },
     }),
   });
-  // 截图专用：组件用 setInterval 每 1.5s 拉一次状态，页面因此永不 idle，
-  // 无头 Chromium 的 --screenshot 会一直等下去（实测挂住）。这里把 setInterval 降级成
-  // 「只再拉一次」，静态截图看的是同一份 DOM，行为差异仅限轮询频率。
+  // 截图专用：组件用 setInterval 轮询，页面因此永不 idle，无头 Chromium 的 --screenshot
+  // 会一直等下去（实测挂住）。这里把 setInterval 降级成「只再拉一次」，静态截图看的是同一份 DOM。
   if (location.search.indexOf('once=1') >= 0) {
     const nativeSetTimeout = window.setTimeout.bind(window);
     window.setInterval = (fn, ms) => { nativeSetTimeout(fn, ms); return 0; };
@@ -217,14 +340,96 @@
 <script>
 (function () {
   const shim = window.__REACT_SHIM__;
+  const params = new URLSearchParams(location.search);
   const registrations = window.__AOQI_REGISTERED__ || [];
   const dock = registrations.find((r) => r.options.name === 'conversation.composer.dock');
   const tool = registrations.find((r) => r.options.name === 'tool.call.toolview');
+  const glyphs = registrations.filter((r) => r.options.name === 'sidebar.panellist');
+  const mains = registrations.filter((r) => r.options.name === 'main');
+
+  const render = (Component, props) => shim.toDom(shim.React.createElement(Component, props));
+
+  // 模拟侧栏：把**真的**入口图标组件渲染进每一行
+  function buildSidebar() {
+    const side = document.getElementById('app-side');
+    side.replaceChildren();   // paint() 会被调用多次（状态变化会重绘），不清理就会叠两遍
+    const rows = [
+      { label: '新会话', glyph: null, cls: 'app__row--idle' },
+      { label: '插件', glyph: null, cls: 'app__row--idle' },
+      { label: '自动化任务', glyph: null, cls: 'app__row--idle' },
+    ];
+    const brand = document.createElement('div');
+    brand.className = 'app__brand';
+    brand.textContent = 'DSH';
+    side.appendChild(brand);
+    rows.forEach((row) => {
+      const el = document.createElement('div');
+      el.className = 'app__row ' + row.cls;
+      if (row.glyph) el.appendChild(row.glyph);
+      el.appendChild(document.createTextNode(row.label));
+      side.appendChild(el);
+    });
+    glyphs.forEach((entry, index) => {
+      const el = document.createElement('div');
+      el.className = 'app__row' + (index === 0 ? ' app__row--active' : '');
+      el.appendChild(render(entry.component, { size: 18, active: index === 0 }));
+      el.appendChild(document.createTextNode(String(entry.options.label)));
+      side.appendChild(el);
+    });
+    const spacer = document.createElement('div');
+    spacer.className = 'app__spacer';
+    side.appendChild(spacer);
+    const settings = document.createElement('div');
+    settings.className = 'app__row app__row--idle';
+    settings.textContent = '设置';
+    side.appendChild(settings);
+  }
+
+  // 主区域：把**真的**那两个面板组件渲染出来。
+  // 内置网页面板里的 iframe 一旦建好就**不能再重建**：每次重绘都重建的话，
+  // 站点会被反复销毁 / 重启加载，无头截图永远拍到空白（实测踩了 6 次）。
+  // 所以：第一次同步搭好骨架 + iframe，之后只刷新没有 iframe 的皮肤中心那块。
+  let skinsHost = null;
+  let skinsEntry = null;
+
+  function buildStack() {
+    const stack = document.getElementById('app-stack');
+    stack.replaceChildren();
+    const raw = params.get('panel');
+    // ?panel=find 和 ?panel=aoqi-find 都认，省得记完整的 slot key
+    const wanted = raw ? (raw.startsWith('aoqi-') ? raw : `aoqi-${raw}`) : null;
+    const order = wanted ? [wanted] : ['aoqi-skins', 'aoqi-find'];
+    order.forEach((key) => {
+      const entry = mains.find((r) => r.options.key === key);
+      if (!entry) return;
+      const block = document.createElement('div');
+      block.className = 'app__block';
+      if (!wanted) {
+        const head = document.createElement('div');
+        head.className = 'app__blockHead';
+        head.textContent = key === 'aoqi-skins' ? 'main 面板 · key = aoqi-skins' : 'main 面板 · key = aoqi-find';
+        block.appendChild(head);
+      }
+      if (key === 'aoqi-find') block.style.height = wanted ? '100%' : '420px';
+      const host = document.createElement('div');
+      host.style.height = key === 'aoqi-find' ? '100%' : 'auto';
+      block.appendChild(host);
+      host.appendChild(render(entry.component, {}));
+      stack.appendChild(block);
+      if (key === 'aoqi-skins') { skinsHost = host; skinsEntry = entry; }
+    });
+  }
+
+  /** 只重绘皮肤中心（目录是异步到的，第一帧还空着）—— 不碰 iframe。 */
+  function refreshSkins() {
+    if (!skinsHost || !skinsEntry) return;
+    skinsHost.replaceChildren();
+    skinsHost.appendChild(render(skinsEntry.component, {}));
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {});
   const mount = () => {
     const runEffects = () => shim.takeEffects().forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
-    // 必须通过 createElement 渲染（而不是直接调 component(...)）：
-    // shim 的 hook 上下文是在 createElement→renderComponent 里建立的，直接调会 useState 报错
-    const render = (Component, props) => shim.toDom(shim.React.createElement(Component, props));
     const paint = () => {
       if (dock) {
         document.getElementById('dock-light').replaceChildren(render(dock.component, {}));
@@ -235,11 +440,24 @@
           result: { text: '宠物：龙炎（huo）\n动画：working（正在使用 edit…）\n统计：回合 12 / 完成 5 / 截断续写 3' },
         }));
       }
+      if (document.getElementById('app').style.display !== 'none') {
+        if (!window.__AOQI_SHELL_BUILT__) { window.__AOQI_SHELL_BUILT__ = true; buildSidebar(); buildStack(); }
+        else refreshSkins();
+      }
       runEffects();
     };
     shim.setRootRender(paint);
     paint();
   };
+
+  // 只有带 ?only=app 或 ?skin= 的时候才摆模拟外壳（默认保持「小宠物截图」的旧版式）
+  if (params.get('only') === 'app' || params.get('skin') || params.get('panel')) {
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('app-note').style.display = 'block';
+  }
+  if (params.get('only') === 'app') {
+    document.querySelectorAll('.band').forEach((el) => { el.style.display = 'none'; });
+  }
   mount();
   window.__AOQI_HARNESS_READY__ = true;
 })();

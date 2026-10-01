@@ -35,14 +35,16 @@
 | 🐾 **跳出软件的桌宠** | 独立进程 + 置顶透明窗口，**DSH 最小化时依然可见**，可以在桌面上拖动、不会被聊天窗口盖住 |
 | 🪂 **重力 + 甩动 + 撞边框** | 重力常开、宠物常态待在屏幕下方；**拎起来往外甩**会带着惯性飞出去、撞到屏幕边框会弹（火花 + 抖动），最后被重力拉回下方停稳。实测甩出峰值 9084px/s、撞过 right/bottom/left 三边。见 [docs/PHYSICS.md](docs/PHYSICS.md) |
 | 🖥️ **也活在 DSH 界面里** | 输入框旁边挂一只**同状态源**的小宠物（`conversation.composer.dock`）：跟着显示待机/干活/完成/出错/等你 + 回合统计，**点一下就换下一只五王**，桌面那只同步换人。见 [docs/IN-APP-UI.md](docs/IN-APP-UI.md) |
+| 🎨 **界面换肤（奥奇皮肤中心）** | 侧栏「奥奇换肤」入口：卡片网格挑底图（官方场景图 / 五王立绘），一根「压暗层」滑杆控制正文可读性。**底图 + 半透明配色一起换**（配色走官方 `ctx.get('theme').overrideTokens`，把面板变玻璃板），选择落盘 `<DSH_HOME>/aoqi-pet/skins.json`。见 [docs/SKINS.md](docs/SKINS.md) |
+| 🧭 **内置网页面板（DSH Find）** | 侧栏「DSH Find」入口，点开就在**主区域**用 iframe 打开 `https://dshfind.com/zh`（工具条带刷新 / 在新标签页打开）。`sandbox` 故意**不加** `allow-top-navigation`，内嵌页面没法把 DSH 自己导航走 |
 | 🎞️ **真·动画，不是静态贴图** | 传说五王（页游官方名）：龙炎 / 诺亚 / 帝释天 / 修尔 / 阿瑞斯 —— 你给的素材是它们的**初始形态**小炎 / 小诺 / 小天 / 阿修 / 阿瑞；每只 **16 帧**，派生 5 种状态动画（待机 / 工作 / 完成 / 出错 / 等待） |
 | 🖼️ **两套素材随时切** | 右键「素材用官方高清立绘」：**页游官网图鉴立绘 370×344 降采样**（清晰）↔ 你给的 **原味 16 帧逐帧动画**（Q 版可爱）。见 [docs/HIRES.md](docs/HIRES.md) |
 | 🪟 **可收起为静态图标** | 右键「收起为图标（静态）」→ 只留一枚**页游官方 logo 做的圆角图标** + 状态点（灰/青/绿/红/橙），不播动画、只占 78×78；展开锚定右下角，状态写回配置 |
 | 💬 **实时进度气泡** | 「正在使用 edit…」「正在努力中…」「这一回合完成啦！」——看一眼桌宠就知道跑到哪了 |
 | 🔔 **完成 / 出错 / 等待提醒** | 桌宠跳跃 + 气泡 + 可选 Windows 系统通知 + 提示音（可用右键静音） |
 | ♻️ **截断自动续写** | 检测 `reason: max-tokens` 的回合结束，自动补发「继续」，带**宽限期 / 冷却 / 连击上限**三重防死循环 |
-| 🛠️ **让模型主动汇报** | 内置 `aoqi_pet_say` / `aoqi_pet_status` / `aoqi_pet_switch` 三个工具，长任务的关键节点由模型自己捅一下桌宠 |
-| 🌐 **可选状态接口** | 注册 `GET /api/aoqi-pet` 读状态、`POST /api/aoqi-pet?action=next-pet\|poke` 做动作（应用内小宠物就是靠它） |
+| 🛠️ **让模型主动汇报** | 内置 `aoqi_pet_say` / `aoqi_pet_status` / `aoqi_pet_switch` / `aoqi_pet_skin` 四个工具：前三个管桌宠（说一句 / 查状态 / 换五王），`aoqi_pet_skin` 管界面换肤（`list` / `apply` / `off`） |
+| 🔌 **可选状态接口** | 注册 `GET /api/aoqi-pet` 读状态（含皮肤目录与内置网页配置）、`GET /api/aoqi-pet/skin/<id>` 发底图二进制、`POST /api/aoqi-pet?action=next-pet\|poke\|set-skin` 做动作（应用内小宠物与皮肤中心就是靠它） |
 | 📦 **零依赖零构建** | 宿主面不 import 任何 `@deepseek-ai/*`；客户端面是手写的 `window.__ModuleLoader__` bundle，不需要 npm 安装、不需要打包工具 |
 
 ## 架构：为什么桌宠必须是另一个进程
@@ -58,8 +60,9 @@ DSH 桌面端的宿主是 **Node 模式的宿主进程**，而 `Tray` / `Notific
 │  lib/auto-continue.js 纯逻辑：要不要续写 / 冷却 / 连击上限（可单测）                            │
 │  lib/bridge.js        写状态、读设置、读指令、写日志                                            │
 │  lib/pet-runtime.js   找 Python（含 DSH 自带运行时）→ 拉起/守护桌宠进程 → 发系统通知            │
-│  lib/client.js        客户端面（浏览器 bundle）：输入框旁的小宠物 + 工具结果卡片               │
-│  tools                 aoqi_pet_say / aoqi_pet_status / aoqi_pet_switch                        │
+│  lib/client.js        客户端面（浏览器 bundle）：小宠物 + 换肤 + 内置网页 + 工具卡片           │
+│  lib/skins.js         皮肤目录（12 项，零依赖纯函数）+ 底图路径解析（防穿越）                  │
+│  tools                 aoqi_pet_say / status / switch / aoqi_pet_skin（换肤）                  │
 └───────────────────────────────────────────┬──────────────────────────────────────────────────┘
         ▲ GET /api/aoqi-pet（DSH 界面内的小宠物轮询同一份状态）
         │                                   │ 文件桥（<DSH_HOME>/aoqi-pet/）
@@ -96,8 +99,17 @@ dsh plugin add D:\Desktop\dsh-aoqi-pet
 ```
 
 插件声明了 `dsh.bundle.patch`，安装后会被当作 profile 的**组合包**默认启用；`cordis.patch.yml` 里开着 HMR 时，**宿主面**（`lib/index.js` 的事件接线、工具、路由）会热加载。
-但**客户端面**（`lib/client.js`，输入框旁边那只小宠物）是**启动时组装**的：安装完请**重启一次 DSH** 才会加载；
+但**客户端面**（`lib/client.js`：输入框旁边那只小宠物、换肤引擎、左侧栏两个入口）是**启动时组装**的：安装完请**重启一次 DSH** 才会加载；
 之后刷新页面**不会**重读磁盘上的 bundle（宿主已把字节 snapshot 下来了）。详见 [docs/IN-APP-UI.md](docs/IN-APP-UI.md) 第 3–4 节。
+
+> **一个反直觉的事实（判断错过一次，记在这里免得再踩）**：`<DSH_HOME>/profiles/desktop/cordis.patch.yml`
+> ——也就是 profile 的 **patch 层**——里确实**只有** `image-generation` 一条 `insert`、**没有** `aoqi-pet`，
+> 但这**不代表插件没挂载**：`<DSH_HOME>/profiles/desktop/package.json` 的 `dsh.profile.bundles` 里列着 `dsh-aoqi-pet`，
+> 于是本包自己的 `dsh.bundle.patch`（就是仓库根目录那份 `cordis.patch.yml`，里面写着 `insert: - id: aoqi-pet`）
+> 会作为 **bundle 层**自动生效。**patch 层不需要、也不该再补一行 insert**（同一个 loader entry id 出现两次会加载失败）。
+> 实测印证：在跑的 GUI 上 `curl http://127.0.0.1:19387/api/aoqi-pet` 返回 **200**，`~/.dsh/aoqi-pet/state.json` 每秒都在刷新。
+> **所以要看到这一轮的新功能只有两步**：① 把新版装/更新进来（插件管理器从 GitHub 装）；
+> ② **重启 DSH**。宿主面（工具、路由）开 HMR 会热加载，**客户端面必须重启**，刷新页面不会重读磁盘上的 bundle。
 
 ### 方式 B：手动挂载（不想用包管理器时）
 
@@ -113,6 +125,11 @@ dsh plugin add D:\Desktop\dsh-aoqi-pet
 ```
 
 3. 保存即热加载（没开 HMR 就重启 DSH）。
+
+> ⚠️ **先查一下有没有撞车**：如果 profile 的 `package.json` 里 `dsh.profile.bundles` **已经**列着 `dsh-aoqi-pet`
+> （`dsh plugin add` 装过的 profile 都会这样），那本包自己的 `dsh.bundle.patch` 已经带了一条 `insert: - id: aoqi-pet`，
+> 再手动补一行就是**同一个 loader entry id 出现两次 → 加载直接失败**。这种情况下什么都别加，
+> 只要把 GitHub 上的新版装/更新进来、然后重启 DSH。
 
 > 两种方式都行，因为插件**零依赖**：不 import 任何 `@deepseek-ai/*`，也不要求自己位于 profile 的 `node_modules` 解析链上。（这也是它不需要声明 `peerDependencies` 的原因——兼容性预检因此永远通过。）
 
@@ -158,6 +175,12 @@ dsh plugin remove dsh-aoqi-pet     # 管理器路线
 | `autoContinue.detectStalled` | `true` | 同时处理「回合结束但没有任何可见输出」 |
 | `notify.onComplete` / `onError` / `onTruncate` / `onWaiting` | `true` | 各类通知开关 |
 | `notify.minTurnMs` | `4000` | 短于这个时长的回合不弹「完成」（避免刷屏） |
+| `skin.enabled` | `true` | 界面换肤总开关（关掉后皮肤目录为空，客户端不换肤） |
+| `skin.defaultSkin` | `aurora` | 没有落盘选择时用哪张皮肤；认不出的 id 退回 `default`（不换肤） |
+| `skin.scrim` | `0.35` | 压暗层默认强度 0~1：越大正文越清楚、底图越淡（皮肤中心的滑杆会覆盖它并落盘） |
+| `find.enabled` | `true` | 左侧栏「DSH Find」内置网页面板开关 |
+| `find.title` | `DSH Find` | 面板工具条上的标题 |
+| `find.url` | `https://dshfind.com/zh` | iframe 打开的地址 |
 
 ## 自动续写是怎么保证不乱来的
 
@@ -187,16 +210,20 @@ turn/end { reason: max-tokens }
   完成与出错照样弹气泡、响提示音、发系统通知——所以**收起也不耽误被提醒**。
 * **让模型主动汇报**（长任务很有用）：`aoqi_pet_say`，参数 `text`（气泡文字）、`mood`（`idle`/`working`/`done`/`error`/`waiting`）。
 * **查状态**：`aoqi_pet_status`（模型侧）或 `GET /api/aoqi-pet`（HTTP）。
+* **换肤**：左侧栏「奥奇换肤」→ 卡片网格挑底图（官方场景图 / 五王立绘），下面一根「压暗层」滑杆，右上角「恢复默认外观」。**底图 + 半透明配色一起换**，选择落盘（重开界面还在）；模型也能换：`aoqi_pet_skin`（`action: list` / `apply` / `off`）。原理、素材清单与「哪些图不入库」见 [docs/SKINS.md](docs/SKINS.md)。
+* **内置网页**：左侧栏「DSH Find」→ 主区域直接嵌 `https://dshfind.com/zh`，工具条有「刷新」和「在新标签页打开」；iframe 的 `sandbox` 不含 `allow-top-navigation`，所以内嵌页面**不能**把 DSH 自己导航走。不想要就把 `find.enabled` 设为 `false`。
+* **注意**：上面这两个入口和输入框旁的小宠物都属于**客户端面**，只有**重启过 DSH** 才会出现（见「安装」一节的当前状态说明）。
 
 ## 目录结构
 
 ```
 dsh-aoqi-pet/
 ├── lib/
-│   ├── index.js          插件入口：事件接线、状态机、通知、三个工具、HTTP 路由（含应用内换宠）
-│   ├── client.js         客户端面（浏览器 bundle，非 ESM，零构建）：输入框旁的小宠物 + 工具卡片
+│   ├── index.js          插件入口：事件接线、状态机、通知、四个工具、HTTP 路由（含换宠与换肤）
+│   ├── client.js         客户端面（浏览器 bundle，非 ESM，零构建）：小宠物 + 换肤引擎 + 内置网页面板 + 工具卡片
 │   ├── auto-continue.js  自动续写决策（纯函数，可单测）
-│   ├── bridge.js         文件桥：state/settings/command/log 读写
+│   ├── bridge.js         文件桥：state/settings/command/skins/log 读写
+│   ├── skins.js          皮肤目录（12 项：场景图 / 五王立绘 / 本机抓图）+ 素材路径解析，纯函数可单测
 │   └── pet-runtime.js    找 Python、拉起并守护桌宠进程、系统气泡通知
 ├── companion/
 │   ├── aoqi_pet.py       桌宠窗口：置顶透明动画、拖拽甩动、重力/碰撞、右键菜单、气泡、收起为图标
@@ -206,17 +233,18 @@ dsh-aoqi-pet/
 │   ├── pets/<id>/        base/f00..f15.png、5 个状态 GIF、portrait.png、hires/（官方高清素材 + source.png）
 │   ├── pets/index.json   每只宠物的元数据与文件清单
 │   ├── pets/names.json   五王真名与官方出处（图鉴链接、立绘 URL）
-│   └── theme/            platform.png（生图站台，抠白底后用）、aoqi-icon.png（官方 logo，收起态）、*-raw.png（生图原图）
+│   └── theme/            platform.png（生图站台，抠白底后用）、aoqi-icon.png（官方 logo，收起态）、aurora-sky-raw.png / stage-platform-raw.png（两张场景底图，换肤用）
 ├── tools/                素材流水线：切片 / 合成动画 / 官方高清 / 抓取 / 文档演示图（可复现）
-├── tools/shoot_client_ui.ps1    用无头 Edge 渲染 test/client-ui-preview.html → docs/in-app-dock.png
-├── test/smoke.mjs        自包含冒烟测试（53 项断言，不装依赖）
-├── test/client-ui.mjs    客户端面契约测试（34 项：假 __ModuleLoader__ + 假 React 真跑 bundle）
+├── tools/shoot_client_ui.ps1    用无头 Edge 渲染 test/client-ui-preview.html → docs/in-app-dock.png（-Query 换查询串、-VirtualTimeMs 等外网资源）
+├── tools/crop_preview.py / tools/preview_is_loaded.py   文档图裁剪；判断截图里的 iframe 到底拍到真站点没有
+├── test/smoke.mjs        自包含冒烟测试（75 项断言，不装依赖）
+├── test/client-ui.mjs    客户端面契约测试（62 项：假 __ModuleLoader__ + 假 React 真跑 bundle）
 ├── test/client-ui-preview.html  本地 harness：在真 Chromium 里渲染那只小宠物（明暗两套主题）
 ├── test/pet-physics.py   物理单测（13 项：重力/反弹/衰减/不穿墙/dt 无关性）
 ├── test/physics-live.py  物理真机验证（Win32 量真实窗口矩形：落下→落底、甩出→撞框→回底）
 ├── test/physics-capture.py  物理真机截图（PrintWindow 抓窗口位图 → 轨迹图 + 胶片条，自带防假证据自检）
 ├── test/switch-guard.py  切换回归测试：隔离实例 + 钉死宿主状态，验证选择不被弹回
-├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）、物理（PHYSICS.md）、界面内宠物（IN-APP-UI.md）、参考规范（CONVENTIONS.md）
+├── docs/                 头图、截图、验证记录、名称考证（NAMES.md）、高清素材（HIRES.md）、物理（PHYSICS.md）、界面内宠物（IN-APP-UI.md）、换肤与内置网页（SKINS.md）、参考规范（CONVENTIONS.md）
 ├── cordis.patch.yml      组合包 patch：把插件行插进 profile
 └── package.json          dsh.bundle.patch + dsh.client（客户端面）+ dsh.catalog 元数据
 ```
@@ -253,8 +281,8 @@ dsh-aoqi-pet/
 
 每个阶段都跑过真实验证，证据与命令见 [docs/VERIFICATION.md](docs/VERIFICATION.md)：
 
-* **冒烟测试 53/53**（`node test/smoke.mjs`）：工具注册、事件→状态机、续写决策、真名/俗称切换、桌宠设置联动、`/api/aoqi-pet` 的 GET/POST 行为。
-* **客户端面契约 34/34**（`node test/client-ui.mjs`）：在假 `__ModuleLoader__` + 假 React + 假 `ctx.slots` 上真跑一遍 `lib/client.js`，逐条断言非 ESM、零顶层副作用、只 require 平台模块、id 等于包名、slot 注册形状、渲染与点击换宠物。
+* **冒烟测试 75/75**（`node test/smoke.mjs`）：工具注册、事件→状态机、续写决策、真名/俗称切换、桌宠设置联动、`/api/aoqi-pet` 的 GET/POST 行为、**换肤**（皮肤目录字段完整性、底图二进制字节数与磁盘一致 + `cache-control`、未知 id 与路径穿越 404、`set-skin` 落盘、`aoqi_pet_skin` 三个 action）与内置网页配置。
+* **客户端面契约 62/62**（`node test/client-ui.mjs`）：在假 `__ModuleLoader__` + 假 React + 假 `ctx.slots` 上真跑一遍 `lib/client.js`，逐条断言非 ESM、零顶层副作用、只 require 平台模块、id 等于包名、slot 注册形状、渲染与点击换宠物；**换肤**真的写到 `<html data-aoqi-skin>` 与 token 覆盖层（含拿不到 theme 服务时的降级路径）、两个 `sidebar.panellist` 入口的 id/order/label、两个 `main` 面板 key 与入口 id 一一对应、iframe 的 `src` 与 `sandbox`。
 * **物理单测 13/13**（`python test/pet-physics.py`）+ **物理真机 10/10**（`python test/physics-live.py`，连跑多次全绿；第 10 项就是「收尸干净」自检）：自顶掉落→停在下方（窗口底边 = 工作区底边）、合成甩动→撞 right/bottom/left→被重力拉回下方停稳。
 * **测试脚本用完会自己收尸**：两个真机脚本都在判定里检查「没有残留的测试桌宠进程」。
   万一桌面上还是多出了宠物，一条命令清掉（只清测试临时目录里的，不动你自己那只）：
@@ -271,6 +299,17 @@ dsh-aoqi-pet/
   DSH 里的位置需要重启后肉眼看，图上也标了这句话。
 
   ![界面内小宠物（本地 harness 渲染）](docs/in-app-dock.png)
+* **换肤与内置网页长什么样**（同一个 harness，查询串选皮肤、只留应用外壳）：
+  1320×900 的极光皮肤 + 皮肤中心 + 内置网页（iframe 里是**真的** dshfind.com），以及龙炎立绘皮肤（立绘在右下半透明面板后面）。
+  复跑命令与可嵌入性实测见 [docs/VERIFICATION.md](docs/VERIFICATION.md) 第 20 节。
+
+  ![皮肤中心与内置网页（本地 harness 渲染）](docs/skins-preview.png)
+
+  ![龙炎立绘皮肤](docs/skins-preview-king.png)
+
+  网页面板那张是从上面第一张里**裁**出来的（不单独拍，避免拍到 iframe 还没画完的一帧）：
+
+  ![从皮肤预览里裁出的网页面板](docs/find-panel.png)
 * **切换回归测试 6/6**（`python test/switch-guard.py`）：自己起一个隔离桌宠实例、把宿主状态钉死在会触发回弹的值上，断言用户的选择不会被宿主状态覆盖；并做了**负向对照**（把旧逻辑装回去，同一测试 5/6 失败）证明它真的能抓 bug。
 * 真实宿主热加载、桌宠进程自动拉起（1.5 秒重生）、窗口截图、相邻帧像素差、状态文件与 HTTP 路由读取。
 * 官方高清素材 25 个 GIF 的帧数/时长/透明三重自检，三种素材偏好的加载实测。
@@ -288,6 +327,10 @@ dsh-aoqi-pet/
 **系统通知不弹？** Windows 专注助手/勿扰会吞掉气泡通知；桌宠气泡和提示音不受影响。也可以直接关掉 `companion.balloonTips`。
 
 **自动续写太积极/太保守？** 调 `autoContinue.maxConsecutive`（想无限就一直加）、`cooldownMs`；不想让它管就 `enabled: false`，或右键「暂停自动续写」（这个开关是持久的）。
+
+**侧栏看不到「奥奇换肤」「DSH Find」，输入框旁边也没有小宠物？** 这三样都属于**客户端面**，只有重启 DSH 才会加载 —— 光刷新页面不行。而且插件本身得先被挂上：桌面 profile 的 `cordis.patch.yml` 里目前还没有 `aoqi-pet` 的 `insert` 行（详见「安装」一节的当前状态说明）。挂上 + 重启之后再看。
+
+**换了皮肤但界面没变？** 依次查：① 皮肤中心的卡片有没有标「使用中」（有 = 宿主已落盘，看 `<DSH_HOME>/aoqi-pet/skins.json`）；② 换肤的目录来自宿主路由，路由连不上时面板会显式提示「宿主状态路由没连上」；③ 底图是二进制路由 `/api/aoqi-pet/skin/<id>`，浏览器里直接打开它能看到图说明素材没问题。皮肤只在本机有素材时才出现（`assets/fetched/**` 不入库）。
 
 **支持 macOS / Linux 吗？** 宿主侧跨平台，但桌宠窗口当前针对 **Windows**（`-transparentcolor`、`winsound`、`powershell.exe` 通知）。macOS 上把 `companion.autoLaunch` 设为 `false` 可以只用自动续写+工具，接自己的窗口实现。
 

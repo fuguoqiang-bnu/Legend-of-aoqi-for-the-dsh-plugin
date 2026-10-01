@@ -10,6 +10,8 @@ DSH 自带运行时 `C:\Users\<你>\.dsh\dsh-runtimes\dsh-primary-runtime\depend
 
 ## 1. 宿主插件纯逻辑与接线：53/53 通过
 
+（这是第一轮的记录；这一轮加了换肤与内置网页后是 **75/75**，新增断言见第 20.1 节。）
+
 ```bash
 node test/smoke.mjs
 ```
@@ -74,6 +76,7 @@ companion: 已启动 pid=30020
 `state.json` 同时被写出来，内容与当时真实会话一致（5 个会话，其中 1 个 running、
 `lastTool: pwsh`，气泡文本是那一刻真的在跑的工具名）。三个工具
 （`aoqi_pet_say` / `aoqi_pet_status` / `aoqi_pet_switch`）也直接出现在模型的工具列表里。
+（这一轮新增了第四个工具 `aoqi_pet_skin`，见第 20.1 节。）
 
 ## 5. 桌宠窗口真的在桌面上、真的透明置顶
 
@@ -315,6 +318,11 @@ python test\switch-guard.py            # 6/6 通过
   所以「Q 版 + 高清」这个组合客观不存在 —— 两套素材并存就是为此。详见 [HIRES.md](HIRES.md)。
 * 屏幕 1.25 倍缩放下，Tk 只会按逻辑像素 1:1 画图，最终仍有 1.25 倍系统缩放；
   做进程级 DPI 感知会改动全部坐标与位置存档，风险大于收益，所以没做。
+* **客户端面**（输入框旁的小宠物、换肤引擎、左侧栏两个入口）改动后**必须重启 DSH** 才生效。
+  插件本身是**已经挂载并在跑**的（bundle 层挂着，实测 `/api/aoqi-pet` 返回 200、`state.json` 每秒刷新），
+  所以看到这两个新入口只差「装新版本 + 重启」两步（见第 20.7 节与 [IN-APP-UI.md](IN-APP-UI.md) 第 3 节）。
+* **内置网页面板**嵌的是第三方站点 `dshfind.com`：能否内嵌取决于它当下不发 `X-Frame-Options` / CSP `frame-ancestors`
+  （实测两者都没有，见第 20.3 节）；站点哪天改了，面板就会白屏。
 
 ## 17. 口径执行记录（只关心页游 / 第三方图不入库）
 
@@ -447,3 +455,209 @@ node test/smoke.mjs         # 其中 9 项是 /api/aoqi-pet 的 GET/POST 行为
 图里顶部有红字标注**这不是 DSH 里的截图**，避免把 harness 结果当成真机证据。
 渲染时踩的坑：`--virtual-time-budget` 遇到页面里的轮询定时器会让无头 Chromium 永不退出（挂死 60s+）；
 清理时只杀 `--headless` 主进程，不能按名字杀 `msedge.exe`（会关掉用户正在用的浏览器）。
+（这一轮客户端契约从 34 项涨到 62 项，见下面第 20 节。）
+
+## 20. 换肤与内置网页（客户端面第二轮）：冒烟 75/75 + 契约 62/62
+
+这一轮加了两个能力：**换肤**（底图 + 半透明配色一起换；皮肤中心有卡片网格与「压暗层」滑杆，选择落盘）和
+**内置网页面板**（侧栏「DSH Find」→ 主区域用 iframe 打开 `https://dshfind.com/zh`）。
+设计取舍、素材清单、以及「为什么压暗层只给 RGB」见 [SKINS.md](SKINS.md)；界面挂在哪见 [IN-APP-UI.md](IN-APP-UI.md) 第 2 节。
+下面每条都写成「怎么跑 → 期望看到什么」。
+
+```bash
+node test/smoke.mjs         # 宿主侧：目录 / 二进制路由 / 落盘 / 工具
+node test/client-ui.mjs     # 客户端面：换肤落到 DOM + 两个新入口 + iframe
+```
+
+### 20.1 宿主侧：75/75，其中换肤 22 项
+
+`node test/smoke.mjs`，期望结尾是：
+
+```
+通过 75 项，失败 0 项
+全部通过 ✅
+```
+
+新增的断言集中在 `C. 换肤（宿主侧）` 这一段，逐条期望：
+
+```
+C. 换肤（宿主侧）
+  ✓ GET 的 payload 里带皮肤目录
+  ✓ 目录含随仓库分发的场景图与五王立绘
+  ✓ 每个皮肤条目都带着客户端面需要的字段
+  ✓ 默认皮肤是配置里的 aurora
+  ✓ payload 里带内置网页配置
+  ✓ 皮肤底图按二进制返回 200
+  ✓ 底图的 Content-Type 正确
+  ✓ 底图字节数与磁盘上的素材一致          ← 不是「看着像」，是字节数相等
+  ✓ 底图带可缓存头（同一张图不会每次换肤都重下）
+  ✓ 未知皮肤返回 404 而不是 500
+  ✓ 路径穿越被挡在 404（素材路径只能由目录给出）
+  ✓ GET /skins 单独给出目录
+  ✓ 未知子路由 404
+  ✓ POST set-skin 返回 200 且切到 huo
+  ✓ POST set-skin 写入 scrim
+  ✓ 皮肤选择落盘到 ~/.dsh/aoqi-pet/skins.json
+  ✓ 换肤会给桌宠冒个气泡
+  ✓ 换一张不存在的皮肤被拒（404），不会把界面换坏
+  ✓ aoqi_pet_skin list 列出皮肤与当前皮肤
+  ✓ aoqi_pet_skin off 恢复默认外观
+  ✓ aoqi_pet_skin apply 换肤并落盘
+  ✓ aoqi_pet_skin 认不出的皮肤给明确错误
+```
+
+三条要点：
+
+* **目录里必然有 7 项**（`aurora` / `stage` + 五王 `huo jin shui an mu`）—— 这些素材随仓库分发；另外 5 项
+  `optional: true` 的抓图（`xinshou` / `tujian` / `jingling` / `zhenxing` / `lite`）来自 `assets/fetched/**`，
+  那个目录被 `.gitignore` 排除（第三方美术版权），所以**只有本机存在时才出现在目录里**，靠 `buildSkinCatalog({available})` 过滤。
+* 底图**不塞进 JSON**，走二进制路由：`content-type` 正确、`content-length` 等于磁盘上的字节数、`cache-control: public, max-age=3600`。
+* 认不出的 id（拼错、皮肤已从目录消失）与路径穿越（`..%2f..%2fpackage.json`）一律 **404**，不静默退回默认 —— 否则「点了没反应」比报错更难查。
+
+想手工看一眼目录（端口就是你在浏览器里打开 DSH 用的那个）：
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:<DSH 端口>/api/aoqi-pet/skins -UseBasicParsing | Select-Object -Expand Content
+```
+
+### 20.2 客户端面：62/62，换肤真的落到 DOM 上
+
+`node test/client-ui.mjs`，期望（节选这一轮新增的三段）：
+
+```
+[6] 换肤引擎（换肤真的作用到 DOM 上）
+  [✓] 引擎轮询了宿主状态路由
+  [✓] 皮肤落到 <html data-aoqi-skin>
+  [✓] 底图变量指向宿主素材路由
+  [✓] 压暗层是现场拼的渐变（强度可调）
+  [✓] 底图尺寸/位置来自目录（场景图满铺）
+  [✓] 走官方 ctx.theme.overrideTokens（而不是自己写死 body 样式）
+  [✓] 覆盖层给的是 { light, dark } 成对值（官方校验要求）
+  [✓] 订阅了 theme/change，明暗切换时重画皮肤
+
+[7] 左侧栏入口与主面板
+  [✓] 注册了 2 个 sidebar.panellist 入口（和「插件」「自动化任务」同一列）
+  [✓] 两个入口都有 id / order / label（list slot 契约）
+  [✓] 注册了 2 个 main 面板（keyed slot，key 必须等于入口 id）
+  [✓] main 的 key 与 panellist 的 id 一一对应
+  [✓] 入口之一是内置网页 dshfind
+  [✓] 皮肤中心渲染出标题
+  [✓] 皮肤中心列出目录里的皮肤
+  [✓] 当前皮肤被标成 data-active
+  [✓] 每张皮肤是一个可点的卡片
+  [✓] 点卡片会 POST set-skin（并立刻在本页生效）
+  [✓] 点卡片后底图变量立刻换成新皮肤
+  [✓] 立绘类皮肤的尺寸/位置是「右侧贴底」
+  [✓] 网页面板渲染出标题与地址
+  [✓] 网页面板里是一个真的 iframe
+  [✓] iframe 指向宿主配置里的地址
+  [✓] iframe 带 sandbox（不允许顶层导航）
+
+[8] 拿不到 theme 服务时的降级路径
+  [✓] 降级路径下底图仍然铺上
+  [✓] 降级路径改成直接往 body 写 token（而不是什么都不做）
+  [✓] 降级路径写的是浅色那一套（按当前色系挑）
+  [✓] 没有 theme 服务也不会抛异常（整段跑完就是证明）
+
+通过 62 项，失败 0 项
+```
+
+关键三条：
+
+* 换肤落到 `<html data-aoqi-skin="aurora">` 与 `--aoqi-skin-image = url("/api/aoqi-pet/skin/aurora")` —— 底图**不是**在 CSS 里写死的；
+* token 覆盖层必须走官方 `overrideTokens`（断言 `source === 'dsh-aoqi-pet/skin'`），且值必须是 `{ light, dark }` **成对值**（给字符串官方校验会抛 `TypeError`）；
+* 两个 `main` 的 `key` 与两个 `sidebar.panellist` 的 `id` 做**集合比较**，一一对应才算过。
+
+### 20.3 可嵌入性：dshfind.com 到底能不能被 iframe 包
+
+```powershell
+curl.exe -I https://dshfind.com/zh
+# 或者：Invoke-WebRequest https://dshfind.com/zh -Method Head -UseBasicParsing | Select-Object StatusCode,Headers
+```
+
+期望：**200**，并且响应头里**没有** `X-Frame-Options`、**没有** CSP 的 `frame-ancestors`（实测两者都没有）。
+另外做过一次**对照实测**：同一张本地页面里放两个 iframe —— 一个带我们这串 `sandbox`、一个完全不写 `sandbox` ——
+两个都完整渲染出了该站点。复现方式就是把 `test/client-ui-preview.html` 里的 iframe 标签复制一份并去掉 `sandbox`，用同一个 harness 拍图对比。
+
+⇒ 「能内嵌」**不是**靠放宽 sandbox 换来的：串里从头到尾没有 `allow-top-navigation`，内嵌页面没法把 DSH 自己导航走。
+
+> **边界**：这是第三方站点**当下**的行为。哪天它加上 `X-Frame-Options` 或 `frame-ancestors`，面板会白屏，那时只能改成「新标签页打开」。
+
+### 20.4 画面：harness 截图怎么跑、期望什么尺寸
+
+```powershell
+# 小宠物那张（默认参数）→ docs/in-app-dock.png
+pwsh -File tools/shoot_client_ui.ps1
+# 极光皮肤 + 皮肤中心 + 内置网页
+pwsh -File tools/shoot_client_ui.ps1 -Query "skin=aurora&once=1&only=app" -Out docs\skins-preview.png -Width 1320 -Height 900
+# 龙炎立绘皮肤（要等外网资源，所以加 -VirtualTimeMs；页面必须带 once=1，否则脚本会直接抛错）
+pwsh -File tools/shoot_client_ui.ps1 -Query "skin=huo&once=1&only=app" -VirtualTimeMs 15000 -Out docs\skins-preview-king.png -Width 1320 -Height 900
+```
+
+期望产物（实测）：
+
+| 图 | 尺寸 | 字节数 | 内容 |
+| --- | --- | --- | --- |
+| `skins-preview.png` | 1320×900 | 1211907 | 极光皮肤 + 皮肤中心 + 内置网页（iframe 里是**真的** dshfind.com） |
+| `skins-preview-king.png` | 1320×900 | 497762 | 龙炎立绘皮肤，立绘在右下半透明面板后面 |
+| `find-panel.png` | 1032×224 | 103428 | 从 `skins-preview.png` 裁出来的网页面板 |
+| `in-app-dock.png` | 1000×430 | 31896 | 输入框旁的小宠物（亮/暗 + 工具卡片） |
+
+**怎么确认「拍的不是空 iframe」**（无头 Chromium 的 `--screenshot` 会在 iframe 还没画完时抢拍）：
+
+```bash
+python tools/preview_is_loaded.py docs/skins-preview.png 268 448 1300 672
+# mean_luma=92.6 dark_ratio=0.61 box=(268, 448, 1300, 672)   → 退出码 0
+python tools/preview_is_loaded.py docs/skins-preview-king.png 268 448 1300 672
+# mean_luma=97.9 dark_ratio=0.61                            → 退出码 0
+```
+
+判据是这一小块的亮度：拍到了站点 → 均值 < 105（退出码 0）；还是皮肤底图 → 很亮（退出码 1）。两张图都过了。
+
+**文档图是裁的还是拍的**：`find-panel.png` 是**裁**出来的，裁框 `(268,448,1300,672)`，复现：
+
+```bash
+python tools/crop_preview.py docs/skins-preview.png <输出路径> 268 448 1300 672
+# source (1320, 900) → wrote <输出路径> (1032, 224)
+```
+
+用同一个裁框重跑，产出的 PNG 与仓库里的 `docs/find-panel.png` **SHA256 逐字节相同**
+（`40803BFE9AE8335C8599CBA76CF3E853E89BD3D37A3EB751B0888689773B23E1`）—— 所以这张图不是另拍的、也不是拼的。
+
+### 20.5 harness 的四个坑（都真踩过）
+
+1. **脚本必须存成 UTF-8 with BOM**：`tools/shoot_client_ui.ps1`（以及同类的 `.ps1`）如果存成无 BOM 的 UTF-8，
+   Windows PowerShell 5.1 会按 GBK 解码里面的中文注释，注释被解坏后**整个脚本解析失败**。
+2. **相对 `-Out` 按仓库根解析**：`[System.IO.Path]::GetFullPath` 用的是**进程**当前目录，而 PowerShell 的 `Set-Location`
+   不会改进程当前目录 —— 直接用相对路径会把图丢到工作区根目录去（脚本里已经自己拼仓库根了）。
+3. **`--screenshot` 的值含空格必须加引号**：仓库路径里的「新建文件夹 (2)」会把值劈成两个 target，
+   浏览器直接报 `Multiple targets are not supported in headless mode` 并以**退出码 13** 结束。
+4. **harness 里 iframe 一旦建好就不能重建**：每次重绘都重建的话，站点会被反复销毁 / 重启加载，
+   无头截图**永远**拍到空白（实测连踩 6 次）。所以 `test/client-ui-preview.html` 只在第一次同步搭好骨架（含 iframe），
+   之后只重绘没有 iframe 的皮肤中心那一块。
+
+### 20.6 三层底图顺序：踩过的坑与正确写法
+
+底图是三层 CSS 变量栈（`--aoqi-skin-scrim` / `--aoqi-skin-image` / `--aoqi-skin-base`）。**CSS 里第一层在最上面**，正确顺序：
+
+```css
+background-image: var(--aoqi-skin-scrim,none), var(--aoqi-skin-image,none), var(--aoqi-skin-base,none);
+/*                 ↑ 最上面：压暗层           ↑ 中间：场景图 / 透明底立绘      ↑ 最下面：垫在立绘下的底色渐层 */
+```
+
+一开始写成 `scrim, base, image`：不透明的 `base` 把立绘**整个盖住** —— 皮肤中心里看得见立绘缩略图，界面上却是一片渐变色。
+纯读代码看不出来（每一条单看都对），是靠**渲染 harness 截图**发现的：改对顺序后立绘才正常透出来。
+
+### 20.7 这一轮的已知边界
+
+* **客户端 bundle 的改动必须重启 DSH 才生效**（页面刷新不会重读磁盘上的 bundle）。
+  插件的**挂载**不是问题：bundle 层（profile `package.json` 的 `dsh.profile.bundles`)已经把它挂上了 ——
+  profile 的 **patch 层** `cordis.patch.yml` 里没有 `aoqi-pet` 的 `insert` 是**正常的**，本包自己的 `dsh.bundle.patch`
+  就带着那条 insert；再补一行反而会因为 loader entry id 重复而加载失败。实测：在跑的 GUI 上
+  `curl http://127.0.0.1:19387/api/aoqi-pet` 返回 **200**，`~/.dsh/aoqi-pet/state.json` 每秒都在刷新。
+  所以真机上只差**「装新版本 + 重启」**两步，见 [IN-APP-UI.md](IN-APP-UI.md) 第 3 节。
+* `sidebar.panellist` / `main` 两个席位**是在 asar 里的官方 bundle 上核对过**的（这一轮补扫了：
+  sidebar 的席位声明 `kind:"list"` 与 `syncPanels()` 读 `id/order/resolveSlotLabel(label)`；
+  layout 的 `kind:"keyed"` 与 `selectPanel()` 里 `hasMainPanel` 的硬校验）；自动化测试另外断言了
+  `main` 的 `key` 与 `sidebar.panellist` 的 `id` 一一对应。**仍然没验的**只有「重启后它在真界面上画出来的样子」。
+* `dshfind.com` 是第三方站点，可嵌入性取决于它当下不设 `X-Frame-Options`（见 20.3）；这条会随站点变化而失效。

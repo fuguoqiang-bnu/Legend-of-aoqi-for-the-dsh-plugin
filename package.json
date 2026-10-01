@@ -1,7 +1,7 @@
 {
   "name": "dsh-aoqi-pet",
-  "version": "0.2.0",
-  "description": "百田《奥奇传说》传说五王（龙炎/诺亚/帝释天/修尔/阿瑞斯）主题的 DeepSeek Harness 桌宠插件：应用之外的置顶动画桌宠窗口（重力/甩动/撞边框物理互动、官方高清立绘与原味逐帧双素材可切）、DSH 界面输入框旁的同步小宠物、完成/出错通知，以及输出被 max-tokens 截断后的自动续写。",
+  "version": "0.3.0",
+  "description": "百田《奥奇传说》传说五王（龙炎/诺亚/帝释天/修尔/阿瑞斯）主题的 DeepSeek Harness 桌宠插件：应用之外的置顶动画桌宠窗口（重力/甩动/撞边框物理互动、官方高清立绘与原味逐帧双素材可切）、DSH 界面输入框旁的同步小宠物、整界面换肤（奥奇场景图与五王立绘 + 半透明玻璃配色）、左侧栏内置网页面板（默认 dshfind.com）、完成/出错通知，以及输出被 max-tokens 截断后的自动续写。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -38,8 +38,8 @@
       "dsh": ">=0.1.0-0"
     },
     "catalog": {
-      "summary": "奥奇传说传说五王桌宠：跳出应用之外的置顶动画宠物窗（官方高清立绘与原味逐帧双素材可切、反重力/甩动/撞边框物理互动）、DSH 界面内输入框旁的同步小宠物、完成/出错提醒，以及被截断输出的自动续写。",
-      "summaryEn": "Aoqi Legend desktop pet for DeepSeek Harness: an always-on-top animated companion window outside the app with throw/bounce physics, an in-app companion dock inside the DSH composer, completion alerts, and automatic continuation of max-tokens-truncated replies.",
+      "summary": "奥奇传说传说五王桌宠：跳出应用之外的置顶动画宠物窗（官方高清立绘与原味逐帧双素材可切、反重力/甩动/撞边框物理互动）、DSH 界面内输入框旁的同步小宠物、整界面换肤（奥奇皮肤中心：官方场景图与五王立绘做底图 + 半透明玻璃配色，可调压暗强度），左侧栏内置网页面板（和「插件」「自动化任务」同一列，点开即用 iframe 打开 dshfind.com），完成/出错提醒，以及被截断输出的自动续写。",
+      "summaryEn": "Aoqi Legend desktop pet for DeepSeek Harness: an always-on-top animated companion window outside the app with throw/bounce physics, an in-app companion dock inside the DSH composer, full-UI skinning (Aoqi scene art and king portraits as wallpaper plus translucent glass tokens, with an adjustable dimming scrim), a built-in web panel in the left sidebar (opens dshfind.com in an iframe), completion alerts, and automatic continuation of max-tokens-truncated replies.",
       "category": "utility",
       "capabilities": [
         "desktop-pet",
@@ -47,7 +47,9 @@
         "physics",
         "notification",
         "auto-continue",
-        "theme"
+        "theme",
+        "skin",
+        "webview"
       ]
     }
   },
@@ -63,6 +65,7 @@
     "test:cleanup": "python test/physics-live.py --cleanup",
     "test:switch": "python test/switch-guard.py",
     "preview:client": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/shoot_client_ui.ps1",
+    "preview:skins": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/shoot_client_ui.ps1 -Query \"skin=aurora&once=1&only=app\" -Out docs\\skins-preview.png -Width 1320 -Height 900",
     "assets:slice": "python tools/slice_pets.py",
     "assets:anim": "python tools/make_anim.py",
     "assets:hires": "python tools/hires_build.py",
@@ -77,6 +80,9 @@
     "aoqi-legend",
     "100bt",
     "auto-continue",
+    "skin",
+    "theme",
+    "dshfind",
     "tkinter"
   ],
   "license": "MIT"

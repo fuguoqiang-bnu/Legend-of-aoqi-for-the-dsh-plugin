@@ -62,13 +62,34 @@ check('没有 require 任何 @deepseek-ai/dsh-client-* 业务组件包（官方 
 console.log('\n[3] 在假 __ModuleLoader__ / 假 React / 假 slots 上真跑一遍');
 const loaded = [];
 const styleNodes = [];
+function makeElement(tag) {
+  const element = {
+    tagName: String(tag).toUpperCase(),
+    textContent: '',
+    attributes: {},
+    dataset: {},
+    props: {},
+    colorScheme: '',
+    setAttribute(name, value) { this.attributes[name] = String(value); },
+    getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; },
+    hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name); },
+    removeAttribute(name) { delete this.attributes[name]; },
+    appendChild(node) { return node; },
+    remove() { const i = styleNodes.indexOf(this); if (i >= 0) styleNodes.splice(i, 1); },
+  };
+  // style 必须是独立对象（浏览器里就是 CSSStyleDeclaration），且要闭包到宿主元素上。
+  element.style = {
+    setProperty(name, value) { element.props[name] = String(value); },
+    removeProperty(name) { delete element.props[name]; },
+    getPropertyValue(name) { return element.props[name] || ''; },
+  };
+  return element;
+}
 const docMock = {
   head: { appendChild: (node) => { styleNodes.push(node); return node; } },
-  createElement: (tag) => ({
-    tagName: tag.toUpperCase(), textContent: '', attributes: {},
-    setAttribute(k, v) { this.attributes[k] = v; },
-    remove() { const i = styleNodes.indexOf(this); if (i >= 0) styleNodes.splice(i, 1); },
-  }),
+  createElement: (tag) => makeElement(tag),
+  documentElement: makeElement('html'),
+  body: makeElement('body'),
 };
 const windowMock = { __ModuleLoader__: { load: (record) => loaded.push(record) } };
 
@@ -83,7 +104,7 @@ function makeReact() {
       createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity) }),
       useState(initial) {
         const index = cursor++;
-        if (!(index in state)) state[index] = initial;
+        if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
         return [state[index], (next) => { state[index] = typeof next === 'function' ? next(state[index]) : next; }];
       },
       useEffect(fn) { effects.push({ index: cursor++, fn }); },
@@ -91,6 +112,30 @@ function makeReact() {
     },
   };
 }
+
+const SKIN_CATALOG = [
+  {
+    id: 'aurora', name: '极光苍穹', subtitle: '官方极光天幕 · 满铺场景', kind: 'scene', accent: '#5ec8ff',
+    image: '/api/aoqi-pet/skin/aurora', imageSize: 'cover', imagePosition: 'center',
+    base: { light: 'none', dark: 'none' }, fallbackColor: { light: '#eef3fb', dark: '#070b18' },
+    scrimRgb: { light: '255,255,255', dark: '3,6,18' },
+    tokens: {
+      '--dsw-alias-bg-base': { light: 'rgba(255,255,255,.52)', dark: 'rgba(7,11,26,.55)' },
+      '--dsw-alias-label-primary': { light: '#101a2e', dark: '#eef3ff' },
+    },
+  },
+  {
+    id: 'huo', name: '烈焰 · 龙炎', subtitle: '传说王者立绘 · 火', kind: 'king', accent: '#ff7a4d',
+    image: '/api/aoqi-pet/skin/huo', imageSize: 'auto 86%', imagePosition: 'right bottom',
+    base: { light: 'radial-gradient(#fff,#000)', dark: 'radial-gradient(#000,#111)' },
+    fallbackColor: { light: '#fff', dark: '#000' },
+    scrimRgb: { light: '255,255,255', dark: '3,6,18' },
+    tokens: {
+      '--dsw-alias-bg-base': { light: 'rgba(255,255,255,.52)', dark: 'rgba(7,11,26,.55)' },
+      '--dsw-alias-label-primary': { light: '#101a2e', dark: '#eef3ff' },
+    },
+  },
+];
 
 const fetches = [];
 const fetchMock = (url, options) => {
@@ -102,6 +147,8 @@ const fetchMock = (url, options) => {
       headline: '正在努力中…', stats: { turns: 7, completions: 2, autoContinues: 1 },
     },
     pets: { huo: { name: '龙炎' } },
+    skin: { enabled: true, id: 'aurora', scrim: 0.45, catalog: SKIN_CATALOG },
+    find: { enabled: true, title: 'DSH Find', url: 'https://dshfind.com/zh' },
   };
   return Promise.resolve({ ok: true, json: () => Promise.resolve(payload) });
 };
@@ -110,8 +157,16 @@ const { React, hooks } = makeReact();
 const registrations = [];
 const injected = [];
 const disposers = [];
+const themeOverrides = [];
+const themeEvents = [];
+const themeMock = {
+  getTheme: () => ({ active: { colorScheme: 'light' }, preference: 'light' }),
+  overrideTokens: (source, tokens) => { themeOverrides.push({ source, tokens }); return () => {}; },
+};
 const ctxMock = {
   effect: (fn) => { const dispose = fn(); disposers.push(dispose); return dispose; },
+  get: (name) => (name === 'theme' ? themeMock : undefined),
+  on: (type, handler) => { themeEvents.push({ type, handler }); return () => {}; },
   slots: {
     inject: (key, callback) => { injected.push(key); return callback(); },
     register: (options, component) => { registrations.push({ options, component }); return () => {}; },
@@ -164,6 +219,13 @@ function findProps(node, key) {
   if (node.props && typeof node.props[key] === 'function') return node.props[key];
   return findProps(node.children, key);
 }
+function findAll(node, predicate, out = []) {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) { for (const child of node) findAll(child, predicate, out); return out; }
+  if (predicate(node)) out.push(node);
+  findAll(node.children, predicate, out);
+  return out;
+}
 
 hooks.reset();
 let tree = null;
@@ -201,6 +263,117 @@ console.log('\n[5] aoqi_pet_status 的工具卡片');
 const toolTree = toolReg.component({ result: { text: '宠物：龙炎（huo）\n动画：idle' } });
 check('拿到工具结果文本时渲染第一行', findText(toolTree, '宠物：龙炎'));
 check('没有结果文本时返回 null（不破坏别人的卡片）', toolReg.component({}) === null);
+
+// ── 6. 换肤引擎：轮询 → 应用底图 + token 覆盖层 ───────────────────────────────
+console.log('\n[6] 换肤引擎（换肤真的作用到 DOM 上）');
+await new Promise((r) => setTimeout(r, 0));
+check('引擎轮询了宿主状态路由', fetches.some((f) => f.url.startsWith('/api/aoqi-pet')));
+check('皮肤落到 <html data-aoqi-skin>', docMock.documentElement.getAttribute('data-aoqi-skin') === 'aurora',
+  JSON.stringify(docMock.documentElement.attributes));
+check('底图变量指向宿主素材路由',
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-image') === 'url("/api/aoqi-pet/skin/aurora")',
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-image'));
+check('压暗层是现场拼的渐变（强度可调）',
+  /^linear-gradient\(180deg,rgba\(255,255,255,0\.4/.test(docMock.documentElement.style.getPropertyValue('--aoqi-skin-scrim')),
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-scrim'));
+check('底图尺寸/位置来自目录（场景图满铺）',
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-size') === 'cover' &&
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-position') === 'center');
+check('走官方 ctx.theme.overrideTokens（而不是自己写死 body 样式）',
+  themeOverrides.length === 1 && themeOverrides[0].source === 'dsh-aoqi-pet/skin',
+  JSON.stringify(themeOverrides.map((o) => o.source)));
+check('覆盖层给的是 { light, dark } 成对值（官方校验要求）',
+  themeOverrides[0]?.tokens?.['--dsw-alias-bg-base']?.light === 'rgba(255,255,255,.52)' &&
+  themeOverrides[0]?.tokens?.['--dsw-alias-bg-base']?.dark === 'rgba(7,11,26,.55)');
+check('订阅了 theme/change，明暗切换时重画皮肤', themeEvents.some((e) => e.type === 'theme/change'));
+
+// ── 7. 左侧栏两个入口：皮肤中心 + 内置网页 ───────────────────────────────────
+console.log('\n[7] 左侧栏入口与主面板');
+const panelEntries = registrations.filter((r) => r.options.name === 'sidebar.panellist');
+check('注册了 2 个 sidebar.panellist 入口（和「插件」「自动化任务」同一列）', panelEntries.length === 2,
+  JSON.stringify(panelEntries.map((r) => r.options.id)));
+check('两个入口都有 id / order / label（list slot 契约）',
+  panelEntries.every((r) => typeof r.options.id === 'string' && typeof r.options.order === 'number' && typeof r.options.label === 'string'),
+  JSON.stringify(panelEntries.map((r) => r.options)));
+const mainEntries = registrations.filter((r) => r.options.name === 'main');
+check('注册了 2 个 main 面板（keyed slot，key 必须等于入口 id）', mainEntries.length === 2,
+  JSON.stringify(mainEntries.map((r) => r.options.key)));
+check('main 的 key 与 panellist 的 id 一一对应',
+  mainEntries.map((r) => r.options.key).sort().join(',') === panelEntries.map((r) => r.options.id).sort().join(','),
+  `${mainEntries.map((r) => r.options.key)} vs ${panelEntries.map((r) => r.options.id)}`);
+check('入口之一是内置网页 dshfind', panelEntries.some((r) => r.options.id === 'aoqi-find'));
+
+const skinPanelReg = mainEntries.find((r) => r.options.key === 'aoqi-skins');
+hooks.reset();
+const skinTree = skinPanelReg.component({});
+check('皮肤中心渲染出标题', findText(skinTree, '奥奇皮肤中心'), JSON.stringify(skinTree).slice(0, 160));
+check('皮肤中心列出目录里的皮肤', findText(skinTree, '极光苍穹') && findText(skinTree, '烈焰 · 龙炎'));
+check('当前皮肤被标成 data-active', JSON.stringify(skinTree).includes('"data-active":"true"'));
+const cards = findAll(skinTree, (node) => node.props && node.props['data-skin'] !== undefined);
+check('每张皮肤是一个可点的卡片', cards.length === 2, String(cards.length));
+const beforePosts = fetches.filter((f) => f.options.method === 'POST').length;
+cards[1].props.onClick();
+const skinPost = fetches.filter((f) => f.options.method === 'POST').slice(beforePosts).map((f) => f.url);
+check('点卡片会 POST set-skin（并立刻在本页生效）',
+  skinPost.some((url) => url.includes('action=set-skin') && url.includes('id=huo')), JSON.stringify(skinPost));
+check('点卡片后底图变量立刻换成新皮肤',
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-image') === 'url("/api/aoqi-pet/skin/huo")',
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-image'));
+check('立绘类皮肤的尺寸/位置是「右侧贴底」',
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-size') === 'auto 86%' &&
+  docMock.documentElement.style.getPropertyValue('--aoqi-skin-position') === 'right bottom');
+
+const findPanelReg = mainEntries.find((r) => r.options.key === 'aoqi-find');
+hooks.reset();
+const findTree = findPanelReg.component({});
+check('网页面板渲染出标题与地址', findText(findTree, 'https://dshfind.com/zh'), JSON.stringify(findTree).slice(0, 200));
+const frames = findAll(findTree, (node) => node.type === 'iframe');
+check('网页面板里是一个真的 iframe', frames.length === 1, String(frames.length));
+check('iframe 指向宿主配置里的地址', frames[0]?.props?.src === 'https://dshfind.com/zh', String(frames[0]?.props?.src));
+check('iframe 带 sandbox（不允许顶层导航）',
+  typeof frames[0]?.props?.sandbox === 'string' && frames[0].props.sandbox.includes('allow-scripts') &&
+  !frames[0].props.sandbox.includes('allow-top-navigation'), String(frames[0]?.props?.sandbox));
+
+// ── 8. 降级路径：宿主还没提供 theme 服务时，也要能用 ─────────────────────────
+console.log('\n[8] 拿不到 theme 服务时的降级路径');
+{
+  const loaded2 = [];
+  const doc2 = {
+    head: { appendChild: (node) => node },
+    createElement: (tag) => makeElement(tag),
+    documentElement: makeElement('html'),
+    body: makeElement('body'),
+  };
+  const window2 = { __ModuleLoader__: { load: (record) => loaded2.push(record) } };
+  const { React: React2 } = makeReact();
+  const ctx2 = {
+    effect: (fn) => { fn(); return () => {}; },
+    // 故意不给 theme：模拟「主题服务还没起来 / 名字变了」
+    get: () => undefined,
+    on: () => () => {},
+    slots: { inject: (key, callback) => callback(), register: (options, component) => ({ options, component }) },
+  };
+  new Function('window', 'document', 'fetch', 'setInterval', 'clearInterval', 'console', src)(
+    window2, doc2, fetchMock, setInterval, clearInterval, console,
+  );
+  const mod2 = loaded2[0].factory((name) => { if (name === 'react') return React2; throw new Error(name); });
+  mod2.apply(ctx2);
+  await new Promise((r) => setTimeout(r, 0));
+  check('降级路径下底图仍然铺上', doc2.documentElement.getAttribute('data-aoqi-skin') === 'aurora',
+    JSON.stringify(doc2.documentElement.attributes));
+  check('降级路径改成直接往 body 写 token（而不是什么都不做）',
+    doc2.body.style.getPropertyValue('--dsw-alias-bg-base') === 'rgba(255,255,255,.52)',
+    doc2.body.style.getPropertyValue('--dsw-alias-bg-base'));
+  check('降级路径写的是浅色那一套（按当前色系挑）',
+    doc2.body.style.getPropertyValue('--dsw-alias-label-primary') === '#101a2e',
+    doc2.body.style.getPropertyValue('--dsw-alias-label-primary'));
+  check('没有 theme 服务也不会抛异常（整段跑完就是证明）', true);
+}
+
+// 清理：把 apply 注册的所有 effect 都拆掉（否则引擎的轮询定时器会吊住进程）
+for (const dispose of disposers) {
+  try { if (typeof dispose === 'function') dispose(); } catch { /* 忽略 */ }
+}
 
 console.log('');
 if (failures.length) {
